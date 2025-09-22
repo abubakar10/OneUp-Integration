@@ -1,0 +1,117 @@
+/* Utility classes for better text handling and responsive design */
+
+/* Text overflow handling */
+.text-ellipsis-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.text-ellipsis-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Better number display */
+.number-display {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Responsive card padding */
+.card-responsive {
+  @apply p-4 sm:p-6;
+}
+
+/* Better spacing for small screens */
+.gap-responsive {
+  @apply gap-3 sm:gap-4 md:gap-6;
+}
+
+/* Currency breakdown styling */
+.currency-item {
+  @apply flex justify-between items-center bg-gray-50 rounded-lg px-3 py-2 text-sm;
+}
+
+.currency-item:hover {
+  @apply bg-gray-100 transition-colors duration-200;
+}
+
+/* Performance card improvements */
+.performance-card {
+  @apply bg-white rounded-xl shadow-lg border-2 p-4 sm:p-6 transition-all duration-300 hover:shadow-2xl transform hover:-translate-y-1;
+}
+
+/* Metric display improvements */
+.metric-value {
+  @apply font-bold text-gray-900 number-display;
+}
+
+.metric-large {
+  @apply text-xl sm:text-2xl metric-value;
+}
+
+.metric-small {
+  @apply text-lg sm:text-xl metric-value;
+}
+
+/* Better responsive grid */
+.grid-responsive-cards {
+  @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 md:gap-6;
+}
+
+.grid-responsive-stats {
+  @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6;
+}
+
+/* Loading states */
+.skeleton {
+  @apply animate-pulse bg-gray-200 rounded;
+}
+
+.skeleton-text {
+  @apply skeleton h-4 w-full mb-2;
+}
+
+.skeleton-title {
+  @apply skeleton h-6 w-3/4 mb-4;
+}
+
+/* Better button spacing on mobile */
+.btn-responsive {
+  @apply px-3 py-2 sm:px-4 sm:py-2 text-sm sm:text-base;
+}
+
+/* Card hover states */
+.card-hover {
+  @apply transition-all duration-300 hover:shadow-xl transform hover:-translate-y-1;
+}
+
+/* Better table responsiveness */
+.table-responsive {
+  @apply overflow-x-auto;
+}
+
+.table-responsive table {
+  @apply min-w-full;
+}
+
+/* Mobile-friendly stats */
+@media (max-width: 640px) {
+  .stats-mobile {
+    @apply text-center;
+  }
+
+  .stats-mobile .metric-large {
+    @apply text-lg;
+  }
+
+  .stats-mobile .metric-small {
+    @apply text-base;
+  }
+}

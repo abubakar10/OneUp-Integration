@@ -1,0 +1,81 @@
+using Microsoft.AspNetCore.Mvc;
+using OneUpDashboard.Api.Services;
+
+namespace OneUpDashboard.Api.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    public class DataAggregationController : ControllerBase
+    {
+        private readonly DataAggregationService _aggregationService;
+        private readonly FastDashboardService _fastDashboardService;
+        private readonly ILogger<DataAggregationController> _logger;
+
+        public DataAggregationController(
+            DataAggregationService aggregationService,
+            FastDashboardService fastDashboardService,
+            ILogger<DataAggregationController> logger)
+        {
+            _aggregationService = aggregationService;
+            _fastDashboardService = fastDashboardService;
+            _logger = logger;
+        }
+
+        /// <summary>
+        /// Manually trigger the data aggregation job (for testing)
+        /// In production, this would be called by a cron job/background service
+        /// </summary>
+        [HttpPost("run")]
+        public async Task<IActionResult> RunAggregation()
+        {
+            try
+            {
+                _logger.LogInformation("🚀 Manual aggregation triggered");
+                
+                // Run in background to avoid timeout
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await _aggregationService.RunFullAggregationAsync();
+                        _logger.LogInformation("✅ Background aggregation completed");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "❌ Background aggregation failed");
+                    }
+                });
+
+                return Ok(new { 
+                    message = "🚀 Aggregation job started in background",
+                    status = "running",
+                    note = "Check /api/dataaggregation/status for progress"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error starting aggregation");
+                return StatusCode(500, new { error = "Failed to start aggregation", details = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Get aggregation status
+        /// </summary>
+        [HttpGet("status")]
+        public async Task<IActionResult> GetStatus()
+        {
+            try
+            {
+                var status = await _fastDashboardService.GetAggregationStatusAsync();
+                return Ok(status);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting aggregation status");
+                return StatusCode(500, new { error = "Failed to get status", details = ex.Message });
+            }
+        }
+    }
+}
+

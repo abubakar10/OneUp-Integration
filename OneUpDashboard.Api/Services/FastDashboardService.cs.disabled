@@ -1,0 +1,140 @@
+using Microsoft.EntityFrameworkCore;
+using OneUpDashboard.Api.Data;
+using OneUpDashboard.Api.Models;
+
+namespace OneUpDashboard.Api.Services
+{
+    public class FastDashboardService
+    {
+        private readonly DashboardDbContext _context;
+        private readonly ILogger<FastDashboardService> _logger;
+
+        public FastDashboardService(DashboardDbContext context, ILogger<FastDashboardService> logger)
+        {
+            _context = context;
+            _logger = logger;
+        }
+
+        /// <summary>
+        /// Get fast dashboard data from pre-aggregated database
+        /// </summary>
+        public async Task<object> GetFastDashboardAsync(int page = 1, int pageSize = 25)
+        {
+            try
+            {
+                var query = _context.SalesAggregations
+                    .Where(s => s.AggregationType == "AllTime")
+                    .OrderByDescending(s => s.TotalSales); // Sort by highest sales first
+
+                var totalCount = await query.CountAsync();
+                var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+
+                var salesData = await query
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .Select(s => new
+                    {
+                        invoice = new
+                        {
+                            id = s.EmployeeId,
+                            invoiceNumber = $"AGG-{s.EmployeeId}",
+                            invoice_date = s.LastUpdated.ToString("yyyy-MM-dd"),
+                            customerName = "Aggregated Sales",
+                            total = s.TotalSales,
+                            currency = s.Currency,
+                            employee_id = s.EmployeeId
+                        },
+                        salespersonName = s.SalespersonName,
+                        // Additional aggregated info
+                        invoiceCount = s.InvoiceCount,
+                        averageSale = s.AverageSale
+                    })
+                    .ToListAsync();
+
+                return new
+                {
+                    page,
+                    pageSize,
+                    totalCount,
+                    totalPages,
+                    count = salesData.Count,
+                    data = salesData,
+                    note = "⚡ Fast dashboard using pre-aggregated data",
+                    lastUpdated = salesData.FirstOrDefault()?.invoice.invoice_date
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting fast dashboard data");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Get salesperson performance data
+        /// </summary>
+        public async Task<object> GetSalespersonPerformanceAsync()
+        {
+            try
+            {
+                var salespeople = await _context.SalesAggregations
+                    .Where(s => s.AggregationType == "AllTime")
+                    .OrderByDescending(s => s.TotalSales)
+                    .Select(s => new
+                    {
+                        employeeId = s.EmployeeId,
+                        name = s.SalespersonName,
+                        totalSales = s.TotalSales,
+                        invoiceCount = s.InvoiceCount,
+                        averageSale = s.AverageSale,
+                        currency = s.Currency,
+                        lastUpdated = s.LastUpdated
+                    })
+                    .ToListAsync();
+
+                return new
+                {
+                    count = salespeople.Count,
+                    data = salespeople,
+                    note = "⚡ Fast salesperson data from pre-aggregated database"
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting salesperson performance data");
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Check if aggregated data is available and when it was last updated
+        /// </summary>
+        public async Task<object> GetAggregationStatusAsync()
+        {
+            try
+            {
+                var latestAggregation = await _context.SalesAggregations
+                    .OrderByDescending(s => s.LastUpdated)
+                    .FirstOrDefaultAsync();
+
+                var totalSalespersons = await _context.SalesAggregations
+                    .Where(s => s.AggregationType == "AllTime")
+                    .CountAsync();
+
+                return new
+                {
+                    hasData = latestAggregation != null,
+                    lastUpdated = latestAggregation?.LastUpdated,
+                    totalSalespersons,
+                    status = latestAggregation != null ? "Ready" : "No data - run aggregation job"
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting aggregation status");
+                throw;
+            }
+        }
+    }
+}
+

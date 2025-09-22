@@ -1,0 +1,57 @@
+using Microsoft.AspNetCore.Mvc;
+using OneUpDashboard.Api.Services;
+
+namespace OneUpDashboard.Api.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    public class FastDashboardController : ControllerBase
+    {
+        private readonly FastDashboardService _fastDashboardService;
+        private readonly ILogger<FastDashboardController> _logger;
+
+        public FastDashboardController(FastDashboardService fastDashboardService, ILogger<FastDashboardController> logger)
+        {
+            _fastDashboardService = fastDashboardService;
+            _logger = logger;
+        }
+
+        /// <summary>
+        /// Get fast dashboard data using pre-aggregated database
+        /// This replaces the slow /api/invoices endpoint for dashboard display
+        /// </summary>
+        [HttpGet("invoices")]
+        public async Task<IActionResult> GetFastInvoices([FromQuery] int page = 1, [FromQuery] int pageSize = 25)
+        {
+            try
+            {
+                var result = await _fastDashboardService.GetFastDashboardAsync(page, pageSize);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting fast dashboard data");
+                return StatusCode(500, new { error = "Failed to get dashboard data", details = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Get fast salesperson performance data
+        /// </summary>
+        [HttpGet("salespersons")]
+        public async Task<IActionResult> GetFastSalespersons()
+        {
+            try
+            {
+                var result = await _fastDashboardService.GetSalespersonPerformanceAsync();
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting salesperson performance data");
+                return StatusCode(500, new { error = "Failed to get salesperson data", details = ex.Message });
+            }
+        }
+    }
+}
+

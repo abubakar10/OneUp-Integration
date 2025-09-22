@@ -1,0 +1,174 @@
+using Microsoft.EntityFrameworkCore;
+using OneUpDashboard.Api.Data;
+using OneUpDashboard.Api.Models;
+using System.Text.Json;
+
+namespace OneUpDashboard.Api.Services
+{
+    public class DataAggregationService
+    {
+        private readonly OneUpClient _client;
+        private readonly DashboardDbContext _context;
+        private readonly ILogger<DataAggregationService> _logger;
+
+        public DataAggregationService(OneUpClient client, DashboardDbContext context, ILogger<DataAggregationService> logger)
+        {
+            _client = client;
+            _context = context;
+            _logger = logger;
+        }
+
+        public async Task RunFullAggregationAsync()
+        {
+            _logger.LogInformation("🚀 Starting full data aggregation...");
+
+            try
+            {
+                // Step 1: Fetch ALL invoices from OneUp API (page by page)
+                var allInvoices = await FetchAllInvoicesAsync();
+                _logger.LogInformation($"✅ Fetched {allInvoices.Count} total invoices");
+
+                // Step 2: Clear existing aggregations
+                await _context.SalesAggregations.ExecuteDeleteAsync();
+                _logger.LogInformation("🗑️ Cleared existing aggregations");
+
+                // Step 3: Group and aggregate by employee
+                var salesByEmployee = new Dictionary<int, SalesAggregation>();
+
+                foreach (var invoice in allInvoices)
+                {
+                    if (invoice.EmployeeId.HasValue)
+                    {
+                        var empId = invoice.EmployeeId.Value;
+                        
+                        if (!salesByEmployee.ContainsKey(empId))
+                        {
+                            salesByEmployee[empId] = new SalesAggregation
+                            {
+                                EmployeeId = empId,
+                                SalespersonName = invoice.SalespersonName,
+                                Currency = invoice.Currency,
+                                AggregationType = "AllTime",
+                                LastUpdated = DateTime.UtcNow,
+                                TotalSales = 0,
+                                InvoiceCount = 0
+                            };
+                        }
+
+                        var agg = salesByEmployee[empId];
+                        agg.TotalSales += invoice.Total;
+                        agg.InvoiceCount++;
+                    }
+                }
+
+                // Calculate average sales
+                foreach (var agg in salesByEmployee.Values)
+                {
+                    agg.AverageSale = agg.InvoiceCount > 0 ? agg.TotalSales / agg.InvoiceCount : 0;
+                }
+
+                // Step 4: Save to database
+                await _context.SalesAggregations.AddRangeAsync(salesByEmployee.Values);
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation($"💾 Saved {salesByEmployee.Count} sales aggregations to database");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "❌ Error during data aggregation");
+                throw;
+            }
+        }
+
+        private async Task<List<InvoiceData>> FetchAllInvoicesAsync()
+        {
+            var allInvoices = new List<InvoiceData>();
+            int page = 1;
+            int pageSize = 100; // OneUp API limit
+            bool hasMoreData = true;
+
+            _logger.LogInformation("📡 Starting to fetch all invoices from OneUp API...");
+
+            while (hasMoreData)
+            {
+                try
+                {
+                    var raw = await _client.GetInvoicesPageAsync(page, pageSize);
+                    var parsed = JsonSerializer.Deserialize<JsonElement>(raw);
+
+                    if (parsed.ValueKind == JsonValueKind.Array)
+                    {
+                        var pageInvoices = new List<InvoiceData>();
+
+                        foreach (var item in parsed.EnumerateArray())
+                        {
+                            // Extract employee_id
+                            int? employeeId = null;
+                            if (item.TryGetProperty("employee_id", out var empProp) && empProp.ValueKind == JsonValueKind.Number)
+                            {
+                                employeeId = empProp.GetInt32();
+                            }
+
+                            if (employeeId.HasValue)
+                            {
+                                // Get salesperson name (cached)
+                                var salespersonName = await _client.GetEmployeeNameByIdAsync(employeeId.Value);
+
+                                var invoiceData = new InvoiceData
+                                {
+                                    Id = item.TryGetProperty("id", out var idProp) ? idProp.GetInt32() : 0,
+                                    EmployeeId = employeeId,
+                                    SalespersonName = salespersonName,
+                                    Total = item.TryGetProperty("total", out var totalProp) ? 
+                                           (totalProp.ValueKind == JsonValueKind.Number ? totalProp.GetDecimal() : 
+                                            decimal.TryParse(totalProp.GetString(), out var totalParsed) ? totalParsed : 0) : 0,
+                                    Currency = item.TryGetProperty("currency_iso_code", out var currProp) ? currProp.GetString() ?? "USD" : "USD",
+                                    InvoiceDate = item.TryGetProperty("date", out var dateProp) ? dateProp.GetString() : null
+                                };
+
+                                pageInvoices.Add(invoiceData);
+                            }
+                        }
+
+                        allInvoices.AddRange(pageInvoices);
+                        _logger.LogInformation($"📄 Page {page}: {pageInvoices.Count} invoices with salesperson data. Total: {allInvoices.Count}");
+
+                        // Check if we got a full page (indicating more data available)
+                        hasMoreData = parsed.GetArrayLength() == pageSize;
+                        page++;
+
+                        // Safety limit
+                        if (page > 200) // Max 20,000 invoices
+                        {
+                            _logger.LogWarning("🛑 Reached safety limit of 200 pages");
+                            hasMoreData = false;
+                        }
+                    }
+                    else
+                    {
+                        hasMoreData = false;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, $"❌ Error fetching page {page}");
+                    hasMoreData = false;
+                }
+            }
+
+            return allInvoices;
+        }
+
+        // Helper class for invoice data
+        private class InvoiceData
+        {
+            public int Id { get; set; }
+            public int? EmployeeId { get; set; }
+            public string SalespersonName { get; set; } = string.Empty;
+            public decimal Total { get; set; }
+            public string Currency { get; set; } = "USD";
+            public string? InvoiceDate { get; set; }
+        }
+    }
+}
+
