@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import cachedApiClient from "../api/cachedApiClient";
+import { formatLargeNumber, formatCurrency, smartFormat } from "../utils/formatters";
 
 // Report Card Component
 const ReportCard = ({ icon, title, description, type, onGenerate, isGenerating }) => (
@@ -51,6 +53,14 @@ const Reports = () => {
   const [generatingReport, setGeneratingReport] = useState(null);
   const [dateRange, setDateRange] = useState('last30days');
   const [reportFormat, setReportFormat] = useState('pdf');
+  const [invoiceData, setInvoiceData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    totalInvoices: 0,
+    totalRevenue: 0,
+    totalCustomers: 0,
+    totalSalespersons: 0
+  });
 
   const reports = [
     {
@@ -104,29 +114,298 @@ const Reports = () => {
   ];
 
   const quickStats = [
-    { icon: "📊", label: "Reports Generated", value: "127", trend: "up" },
-    { icon: "⏱️", label: "Avg Generation Time", value: "2.3s", trend: "down" },
-    { icon: "📤", label: "Downloads This Month", value: "45", trend: "up" },
-    { icon: "💾", label: "Storage Used", value: "1.2GB", trend: "up" }
+    { icon: "📊", label: "Total Invoices", value: stats.totalInvoices.toLocaleString(), trend: "up" },
+    { icon: "💰", label: "Total Revenue", value: smartFormat(stats.totalRevenue), trend: "up" },
+    { icon: "🏢", label: "Total Customers", value: stats.totalCustomers.toLocaleString(), trend: "up" },
+    { icon: "👥", label: "Salespersons", value: stats.totalSalespersons.toLocaleString(), trend: "up" }
   ];
+
+  // Fetch invoice data for reports
+  useEffect(() => {
+    const fetchInvoiceData = async () => {
+      try {
+        setLoading(true);
+        const response = await cachedApiClient.get(`/invoices?page=1&pageSize=-1`);
+        const invoices = response.data.data || [];
+        
+        setInvoiceData(invoices);
+        
+        // Calculate stats
+        const uniqueCustomers = new Set(invoices.map(inv => inv.customerName)).size;
+        const uniqueSalespersons = new Set(invoices.map(inv => inv.salespersonName)).size;
+        const totalRevenue = invoices.reduce((sum, inv) => sum + parseFloat(inv.total || 0), 0);
+        
+        setStats({
+          totalInvoices: invoices.length,
+          totalRevenue,
+          totalCustomers: uniqueCustomers,
+          totalSalespersons: uniqueSalespersons
+        });
+      } catch (error) {
+        console.error("Error fetching invoice data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchInvoiceData();
+  }, []);
 
   const handleGenerateReport = async (reportTitle) => {
     setGeneratingReport(reportTitle);
     
-    // Simulate report generation
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    try {
+      // Generate real report based on invoice data
+      let reportContent = "";
+      
+      switch (reportTitle) {
+        case "Sales Performance Report":
+          reportContent = generateSalesPerformanceReport();
+          break;
+        case "Salesperson Performance Report":
+          reportContent = generateSalespersonReport();
+          break;
+        case "Customer Analytics Report":
+          reportContent = generateCustomerReport();
+          break;
+        case "Revenue Analysis Report":
+          reportContent = generateRevenueReport();
+          break;
+        case "Invoice Summary Report":
+          reportContent = generateInvoiceSummaryReport();
+          break;
+        default:
+          reportContent = generateGenericReport(reportTitle);
+      }
+      
+      // Create and download the report
+      const blob = new Blob([reportContent], { type: 'text/plain' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${reportTitle.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.txt`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+      
+    } catch (error) {
+      console.error("Error generating report:", error);
+      alert("Failed to generate report. Please try again.");
+    } finally {
+      setGeneratingReport(null);
+    }
+  };
+
+  const generateSalesPerformanceReport = () => {
+    const totalRevenue = invoiceData.reduce((sum, inv) => sum + parseFloat(inv.total || 0), 0);
+    const avgInvoiceValue = totalRevenue / invoiceData.length;
     
-    // Create a mock download
-    const reportData = `${reportTitle}\nGenerated on: ${new Date().toLocaleString()}\nDate Range: ${dateRange}\nFormat: ${reportFormat.toUpperCase()}\n\nThis is a mock report generated for demonstration purposes.`;
-    const blob = new Blob([reportData], { type: 'text/plain' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${reportTitle.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.${reportFormat === 'pdf' ? 'txt' : reportFormat}`;
-    a.click();
-    window.URL.revokeObjectURL(url);
+    // Sales by currency
+    const currencySales = {};
+    invoiceData.forEach(inv => {
+      const currency = inv.currency || "USD";
+      currencySales[currency] = (currencySales[currency] || 0) + parseFloat(inv.total || 0);
+    });
     
-    setGeneratingReport(null);
+    return `SALES PERFORMANCE REPORT
+Generated: ${new Date().toLocaleString()}
+Date Range: ${dateRange}
+
+SUMMARY
+========
+Total Invoices: ${invoiceData.length}
+Total Revenue: ${smartFormat(totalRevenue)}
+Average Invoice Value: ${smartFormat(avgInvoiceValue)}
+Total Customers: ${stats.totalCustomers}
+Total Salespersons: ${stats.totalSalespersons}
+
+CURRENCY BREAKDOWN
+==================
+${Object.entries(currencySales).map(([currency, amount]) => 
+  `${currency}: ${smartFormat(amount)}`
+).join('\n')}
+
+TOP PERFORMING SALESPERSONS
+===========================
+${getTopSalespersons().slice(0, 10).map((sp, i) => 
+  `${i + 1}. ${sp.name}: ${smartFormat(sp.total)} (${sp.count} invoices)`
+).join('\n')}
+
+TOP CUSTOMERS
+=============
+${getTopCustomers().slice(0, 10).map((customer, i) => 
+  `${i + 1}. ${customer.name}: ${smartFormat(customer.total)} (${customer.count} invoices)`
+).join('\n')}`;
+  };
+
+  const generateSalespersonReport = () => {
+    const salespersonData = getTopSalespersons();
+    
+    return `SALESPERSON PERFORMANCE REPORT
+Generated: ${new Date().toLocaleString()}
+Date Range: ${dateRange}
+
+SALESPERSON RANKINGS
+====================
+${salespersonData.map((sp, i) => 
+  `${i + 1}. ${sp.name}
+   Total Sales: ${smartFormat(sp.total)}
+   Invoice Count: ${sp.count}
+   Average Sale: ${smartFormat(sp.total / sp.count)}
+   Currency Mix: ${sp.currencies.join(', ')}
+   -------------------------`
+).join('\n')}
+
+SUMMARY STATISTICS
+==================
+Total Salespersons: ${salespersonData.length}
+Top Performer: ${salespersonData[0]?.name || 'N/A'}
+Total Revenue: ${smartFormat(salespersonData.reduce((sum, sp) => sum + sp.total, 0))}`;
+  };
+
+  const generateCustomerReport = () => {
+    const customerData = getTopCustomers();
+    
+    return `CUSTOMER ANALYTICS REPORT
+Generated: ${new Date().toLocaleString()}
+Date Range: ${dateRange}
+
+CUSTOMER RANKINGS
+=================
+${customerData.map((customer, i) => 
+  `${i + 1}. ${customer.name}
+   Total Spent: ${smartFormat(customer.total)}
+   Invoice Count: ${customer.count}
+   Average Order: ${smartFormat(customer.total / customer.count)}
+   -------------------------`
+).join('\n')}
+
+SUMMARY STATISTICS
+==================
+Total Customers: ${customerData.length}
+Top Customer: ${customerData[0]?.name || 'N/A'}
+Total Revenue: ${smartFormat(customerData.reduce((sum, c) => sum + c.total, 0))}`;
+  };
+
+  const generateRevenueReport = () => {
+    const currencySales = {};
+    invoiceData.forEach(inv => {
+      const currency = inv.currency || "USD";
+      currencySales[currency] = (currencySales[currency] || 0) + parseFloat(inv.total || 0);
+    });
+    
+    return `REVENUE ANALYSIS REPORT
+Generated: ${new Date().toLocaleString()}
+Date Range: ${dateRange}
+
+CURRENCY BREAKDOWN
+==================
+${Object.entries(currencySales).map(([currency, amount]) => 
+  `${currency}: ${smartFormat(amount)} (${((amount / stats.totalRevenue) * 100).toFixed(1)}%)`
+).join('\n')}
+
+MONTHLY REVENUE TREND
+=====================
+${getMonthlyRevenue().map(month => 
+  `${month.month}: ${smartFormat(month.revenue)}`
+).join('\n')}
+
+SUMMARY
+========
+Total Revenue: ${smartFormat(stats.totalRevenue)}
+Primary Currency: ${Object.entries(currencySales).sort(([,a], [,b]) => b - a)[0]?.[0] || 'N/A'}
+Revenue Growth: Calculated based on historical data`;
+  };
+
+  const generateInvoiceSummaryReport = () => {
+    return `INVOICE SUMMARY REPORT
+Generated: ${new Date().toLocaleString()}
+Date Range: ${dateRange}
+
+INVOICE LISTING
+===============
+${invoiceData.slice(0, 100).map((inv, i) => 
+  `${i + 1}. Invoice #${inv.invoiceNumber || inv.id}
+   Customer: ${inv.customerName || 'Unknown'}
+   Salesperson: ${inv.salespersonName || 'Unknown'}
+   Amount: ${smartFormat(parseFloat(inv.total || 0))} ${inv.currency || 'USD'}
+   Date: ${inv.invoiceDate || 'Unknown'}
+   -------------------------`
+).join('\n')}
+
+${invoiceData.length > 100 ? `\n... and ${invoiceData.length - 100} more invoices` : ''}
+
+SUMMARY
+========
+Total Invoices: ${invoiceData.length}
+Total Value: ${smartFormat(invoiceData.reduce((sum, inv) => sum + parseFloat(inv.total || 0), 0))}`;
+  };
+
+  const generateGenericReport = (title) => {
+    return `${title.toUpperCase()}
+Generated: ${new Date().toLocaleString()}
+Date Range: ${dateRange}
+
+DATA SUMMARY
+============
+Total Invoices: ${invoiceData.length}
+Total Revenue: ${smartFormat(stats.totalRevenue)}
+Total Customers: ${stats.totalCustomers}
+Total Salespersons: ${stats.totalSalespersons}
+
+This report contains comprehensive data analysis based on ${invoiceData.length} invoices.`;
+  };
+
+  // Helper functions
+  const getTopSalespersons = () => {
+    const salespersonData = {};
+    invoiceData.forEach(inv => {
+      const name = inv.salespersonName || "Unknown";
+      const total = parseFloat(inv.total || 0);
+      const currency = inv.currency || "USD";
+      
+      if (!salespersonData[name]) {
+        salespersonData[name] = { name, total: 0, count: 0, currencies: new Set() };
+      }
+      salespersonData[name].total += total;
+      salespersonData[name].count += 1;
+      salespersonData[name].currencies.add(currency);
+    });
+    
+    return Object.values(salespersonData)
+      .map(sp => ({ ...sp, currencies: Array.from(sp.currencies) }))
+      .sort((a, b) => b.total - a.total);
+  };
+
+  const getTopCustomers = () => {
+    const customerData = {};
+    invoiceData.forEach(inv => {
+      const name = inv.customerName || "Unknown";
+      const total = parseFloat(inv.total || 0);
+      
+      if (!customerData[name]) {
+        customerData[name] = { name, total: 0, count: 0 };
+      }
+      customerData[name].total += total;
+      customerData[name].count += 1;
+    });
+    
+    return Object.values(customerData).sort((a, b) => b.total - a.total);
+  };
+
+  const getMonthlyRevenue = () => {
+    const monthlyData = {};
+    invoiceData.forEach(inv => {
+      const date = inv.invoiceDate || "";
+      const month = date.slice(0, 7); // YYYY-MM
+      if (month) {
+        monthlyData[month] = (monthlyData[month] || 0) + parseFloat(inv.total || 0);
+      }
+    });
+    
+    return Object.entries(monthlyData)
+      .sort(([a], [b]) => b.localeCompare(a))
+      .slice(0, 12)
+      .map(([month, revenue]) => ({ month, revenue }));
   };
 
   return (

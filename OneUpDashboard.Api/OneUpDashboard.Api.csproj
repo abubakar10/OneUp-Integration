@@ -7,11 +7,15 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Azure.Identity" Version="1.16.0" />
     <PackageReference Include="Hangfire.AspNetCore" Version="1.8.21" />
     <PackageReference Include="Hangfire.Core" Version="1.8.21" />
     <PackageReference Include="Hangfire.MemoryStorage" Version="1.8.1.2" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.11" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.8" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.8" />
+    <PackageReference Include="Microsoft.Graph" Version="5.93.0" />
+    <PackageReference Include="MongoDB.Driver" Version="2.28.0" />
   </ItemGroup>
 
 </Project>

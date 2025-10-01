@@ -1,8 +1,16 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { useState } from "react";
+import { useAuth } from "../contexts/AuthContext";
 
 const Sidebar = () => {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   const links = [
     { name: "Dashboard", path: "/", icon: "📊" },
@@ -62,6 +70,48 @@ const Sidebar = () => {
           </NavLink>
         ))}
       </nav>
+
+      {/* User Info & Logout */}
+      {user && (
+        <div className="p-4 border-t border-gray-700">
+          {!isCollapsed ? (
+            <div className="mb-3">
+              <div className="flex items-center gap-3 p-3 bg-gray-800 rounded-lg">
+                <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-sm font-bold">
+                  {user.displayName?.charAt(0) || user.email?.charAt(0) || 'U'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-white truncate">
+                    {user.displayName || 'User'}
+                  </p>
+                  <p className="text-xs text-gray-400 truncate">
+                    {user.email}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="mb-3 flex justify-center">
+              <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-sm font-bold">
+                {user.displayName?.charAt(0) || user.email?.charAt(0) || 'U'}
+              </div>
+            </div>
+          )}
+          
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 hover:bg-red-600 hover:shadow-md group"
+            title={isCollapsed ? "Logout" : ""}
+          >
+            <span className="text-xl flex-shrink-0">🚪</span>
+            {!isCollapsed && (
+              <span className="font-medium group-hover:text-red-200 transition-colors">
+                Logout
+              </span>
+            )}
+          </button>
+        </div>
+      )}
 
       {/* Footer */}
       <div className="p-4 border-t border-gray-700">

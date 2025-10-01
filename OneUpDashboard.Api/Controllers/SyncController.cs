@@ -1,27 +1,27 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using OneUpDashboard.Api.Data;
+using Microsoft.AspNetCore.Authorization;
 using OneUpDashboard.Api.Services;
-using OneUpDashboard.Api.Models;
+using OneUpDashboard.Api.Models.MongoDb;
 using Hangfire;
 
 namespace OneUpDashboard.Api.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class SyncController : ControllerBase
     {
         private readonly DataSyncService _syncService;
-        private readonly DashboardDbContext _context;
+        private readonly MongoDbService _mongoDbService;
         private readonly ILogger<SyncController> _logger;
 
         public SyncController(
             DataSyncService syncService,
-            DashboardDbContext context,
+            MongoDbService mongoDbService,
             ILogger<SyncController> logger)
         {
             _syncService = syncService;
-            _context = context;
+            _mongoDbService = mongoDbService;
             _logger = logger;
         }
 
@@ -33,9 +33,7 @@ namespace OneUpDashboard.Api.Controllers
         {
             try
             {
-                var latestSync = await _context.SyncLogs
-                    .OrderByDescending(s => s.StartTime)
-                    .FirstOrDefaultAsync();
+                var latestSync = await _mongoDbService.GetLatestSyncLogAsync();
 
                 // Check if any sync is currently running (Hangfire jobs)
                 var isRunning = false;
@@ -76,46 +74,21 @@ namespace OneUpDashboard.Api.Controllers
         {
             try
             {
-                var totalInvoices = await _context.Invoices.CountAsync();
-                var totalEmployees = await _context.Employees.CountAsync();
+                var totalInvoices = await _mongoDbService.GetInvoiceCountAsync();
+                var totalEmployees = await _mongoDbService.GetEmployeeCountAsync();
                 
-                var latestInvoice = await _context.Invoices
-                    .OrderByDescending(i => i.InvoiceDate)
-                    .FirstOrDefaultAsync();
-
-                var oldestInvoice = await _context.Invoices
-                    .OrderBy(i => i.InvoiceDate)
-                    .FirstOrDefaultAsync();
-
-                var currencyBreakdown = await _context.Invoices
-                    .GroupBy(i => i.Currency)
-                    .Select(g => new { currency = g.Key, count = g.Count() })
-                    .ToListAsync();
-
-                // Get database file size (SQLite specific)
-                string? databaseSize = null;
-                try
-                {
-                    var dbPath = Path.Combine(Directory.GetCurrentDirectory(), "dashboard.db");
-                    if (System.IO.File.Exists(dbPath))
-                    {
-                        var fileInfo = new FileInfo(dbPath);
-                        databaseSize = $"{fileInfo.Length / 1024 / 1024:F1} MB";
-                    }
-                }
-                catch
-                {
-                    // Ignore file size errors
-                }
+                var latestInvoiceDate = await _mongoDbService.GetLatestInvoiceDateAsync();
+                var oldestInvoiceDate = await _mongoDbService.GetOldestInvoiceDateAsync();
+                var currencyBreakdown = await _mongoDbService.GetCurrencyBreakdownAsync();
 
                 var stats = new
                 {
                     totalInvoices = totalInvoices,
                     totalEmployees = totalEmployees,
-                    latestInvoiceDate = latestInvoice?.InvoiceDate.ToString("yyyy-MM-dd"),
-                    oldestInvoiceDate = oldestInvoice?.InvoiceDate.ToString("yyyy-MM-dd"),
-                    databaseSize = databaseSize,
-                    currencyBreakdown = currencyBreakdown
+                    latestInvoiceDate = latestInvoiceDate?.ToString("yyyy-MM-dd"),
+                    oldestInvoiceDate = oldestInvoiceDate?.ToString("yyyy-MM-dd"),
+                    databaseSize = "MongoDB Collection", // MongoDB doesn't have a single file size concept
+                    currencyBreakdown = currencyBreakdown.Select(c => new { currency = c.Key, count = c.Value }).ToList()
                 };
 
                 return Ok(stats);
@@ -138,11 +111,9 @@ namespace OneUpDashboard.Api.Controllers
                 _logger.LogInformation("🚀 Manual sync triggered via API");
 
                 // Check if sync is already running
-                var recentSync = await _context.SyncLogs
-                    .Where(s => s.Status == "running" && s.StartTime > DateTime.UtcNow.AddHours(-1))
-                    .FirstOrDefaultAsync();
-
-                if (recentSync != null)
+                var recentSync = await _mongoDbService.GetLatestSyncLogAsync();
+                if (recentSync != null && recentSync.Status == "running" && 
+                    recentSync.StartTime > DateTime.UtcNow.AddHours(-1))
                 {
                     return BadRequest(new { error = "Sync is already running", syncId = recentSync.Id });
                 }
@@ -168,6 +139,49 @@ namespace OneUpDashboard.Api.Controllers
         }
 
         /// <summary>
+        /// Stop/cancel current sync
+        /// </summary>
+        [HttpPost("stop")]
+        public async Task<IActionResult> StopSync()
+        {
+            try
+            {
+                _logger.LogInformation("🛑 Stop sync requested via API");
+
+                // Get the latest running sync
+                var runningSync = await _mongoDbService.GetLatestSyncLogAsync();
+                if (runningSync != null && runningSync.Status == "running")
+                {
+                    // Mark the sync as cancelled
+                    runningSync.Status = "cancelled";
+                    runningSync.EndTime = DateTime.UtcNow;
+                    runningSync.DurationSeconds = (int)(runningSync.EndTime.Value - runningSync.StartTime).TotalSeconds;
+                    runningSync.Notes = "Sync cancelled by user";
+                    
+                    await _mongoDbService.UpdateSyncLogAsync(runningSync);
+                    
+                    _logger.LogInformation("✅ Sync cancelled successfully");
+                    
+                    return Ok(new
+                    {
+                        message = "🛑 Sync cancelled successfully",
+                        syncId = runningSync.Id,
+                        status = "cancelled"
+                    });
+                }
+                else
+                {
+                    return BadRequest(new { error = "No running sync found to cancel" });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error stopping sync");
+                return StatusCode(500, new { error = "Failed to stop sync", details = ex.Message });
+            }
+        }
+
+        /// <summary>
         /// Get sync history/logs
         /// </summary>
         [HttpGet("history")]
@@ -175,26 +189,24 @@ namespace OneUpDashboard.Api.Controllers
         {
             try
             {
-                var history = await _context.SyncLogs
-                    .OrderByDescending(s => s.StartTime)
-                    .Take(limit)
-                    .Select(s => new
-                    {
-                        id = s.Id,
-                        syncType = s.SyncType,
-                        status = s.Status,
-                        startTime = s.StartTime,
-                        endTime = s.EndTime,
-                        duration = s.DurationSeconds,
-                        totalRecords = s.TotalRecords,
-                        processedRecords = s.ProcessedRecords,
-                        apiCalls = s.ApiCallsCount,
-                        errorMessage = s.ErrorMessage,
-                        notes = s.Notes
-                    })
-                    .ToListAsync();
+                var history = await _mongoDbService.GetSyncLogsAsync(limit);
 
-                return Ok(history);
+                var historyResponse = history.Select(s => new
+                {
+                    id = s.Id,
+                    syncType = s.SyncType,
+                    status = s.Status,
+                    startTime = s.StartTime,
+                    endTime = s.EndTime,
+                    duration = s.DurationSeconds,
+                    totalRecords = s.TotalRecords,
+                    processedRecords = s.ProcessedRecords,
+                    apiCalls = s.ApiCallsCount,
+                    errorMessage = s.ErrorMessage,
+                    notes = s.Notes
+                }).ToList();
+
+                return Ok(historyResponse);
             }
             catch (Exception ex)
             {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import axios from "axios";
+import apiClient from "../api/apiClient";
 
 function SyncMonitor() {
   const [syncStatus, setSyncStatus] = useState(null);
@@ -15,8 +15,8 @@ function SyncMonitor() {
     const fetchStatus = async () => {
       try {
         const [statusResponse, statsResponse] = await Promise.all([
-          axios.get("http://localhost:5216/api/sync/status"),
-          axios.get("http://localhost:5216/api/sync/stats")
+          apiClient.get("/sync/status"),
+          apiClient.get("/sync/stats")
         ]);
 
         setSyncStatus(statusResponse.data);
@@ -66,7 +66,7 @@ function SyncMonitor() {
       };
       setLogs(prev => [newLog, ...prev]);
 
-      const response = await axios.post("http://localhost:5216/api/sync/trigger");
+      const response = await apiClient.post("/sync/trigger");
       
       const successLog = {
         id: Date.now() + 1,
@@ -82,6 +82,42 @@ function SyncMonitor() {
         id: Date.now(),
         timestamp: new Date().toLocaleTimeString(),
         message: `❌ Failed to start sync: ${err.message}`,
+        type: 'error'
+      };
+      setLogs(prev => [errorLog, ...prev]);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const stopSync = async () => {
+    try {
+      setSyncing(true);
+      
+      const newLog = {
+        id: Date.now(),
+        timestamp: new Date().toLocaleTimeString(),
+        message: "🛑 Stopping sync...",
+        type: 'info'
+      };
+      setLogs(prev => [newLog, ...prev]);
+
+      const response = await apiClient.post("/sync/stop");
+      
+      const successLog = {
+        id: Date.now() + 1,
+        timestamp: new Date().toLocaleTimeString(),
+        message: `✅ ${response.data.message}`,
+        type: 'success'
+      };
+      setLogs(prev => [successLog, ...prev]);
+      
+    } catch (err) {
+      console.error("Failed to stop sync:", err);
+      const errorLog = {
+        id: Date.now(),
+        timestamp: new Date().toLocaleTimeString(),
+        message: `❌ Failed to stop sync: ${err.response?.data?.error || err.message}`,
         type: 'error'
       };
       setLogs(prev => [errorLog, ...prev]);
@@ -194,6 +230,18 @@ function SyncMonitor() {
                 {syncing ? '🚀 Starting...' : 
                  syncStatus?.isRunning ? '⏳ Sync in Progress...' : 
                  '🚀 Start Full Sync'}
+              </button>
+
+              <button
+                onClick={stopSync}
+                disabled={!syncStatus?.isRunning || syncing}
+                className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+                  !syncStatus?.isRunning || syncing
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-red-600 text-white hover:bg-red-700'
+                }`}
+              >
+                {syncing ? '🛑 Stopping...' : '🛑 Stop Sync'}
               </button>
 
               <button

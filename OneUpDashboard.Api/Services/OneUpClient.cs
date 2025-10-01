@@ -187,5 +187,38 @@ namespace OneUpDashboard.Api.Services
                 // If bulk fetch fails, individual calls will still work
             }
         }
+
+        /// <summary>
+        /// Fetch a specific page of employees using offset + limit
+        /// </summary>
+        public async Task<string> GetEmployeesPageAsync(int page = 1, int limit = 100)
+        {
+            await _requestSemaphore.WaitAsync();
+            try
+            {
+                int offset = (page - 1) * limit;
+                var url = $"employees?offset={offset}&limit={limit}";
+                
+                Console.WriteLine($"OneUp API Call: {url}");
+                
+                var response = await _httpClient.GetAsync(url);
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    Console.WriteLine($"✅ Employee API response: {content.Length} characters");
+                    return content;
+                }
+                else
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    throw new HttpRequestException($"Employee API failed: {response.StatusCode} - {errorContent}");
+                }
+            }
+            finally
+            {
+                _requestSemaphore.Release();
+            }
+        }
     }
 }

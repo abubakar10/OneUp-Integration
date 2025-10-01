@@ -91,9 +91,15 @@ const PerformanceCard = ({ salesperson, rank, isTopPerformer = false }) => {
 
 // Stats Overview Component
 const StatsOverview = ({ salespersons }) => {
-  const totalSales = salespersons.reduce((sum, sp) => sum + (sp.totalSales || 0), 0);
+  // Calculate currency totals (no conversion)
+  const currencyTotals = {};
+  salespersons.forEach(sp => {
+    sp.currencies?.forEach(curr => {
+      currencyTotals[curr.currency] = (currencyTotals[curr.currency] || 0) + curr.total;
+    });
+  });
+  
   const totalInvoices = salespersons.reduce((sum, sp) => sum + (sp.invoiceCount || 0), 0);
-  const avgSale = totalSales / totalInvoices || 0;
   const topPerformer = salespersons[0]?.salespersonName || "N/A";
 
   return (
@@ -101,8 +107,8 @@ const StatsOverview = ({ salespersons }) => {
       <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 hover:shadow-xl transition-all duration-300">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-gray-600 uppercase tracking-wide">Total Sales</p>
-            <p className="text-2xl font-bold text-green-600">{smartFormat(totalSales)}</p>
+            <p className="text-sm font-medium text-gray-600 uppercase tracking-wide">USD Sales</p>
+            <p className="text-2xl font-bold text-green-600">{smartFormat(currencyTotals["USD"] || 0)}</p>
           </div>
           <div className="p-3 bg-green-100 rounded-lg">
             <span className="text-2xl">💰</span>
@@ -113,11 +119,11 @@ const StatsOverview = ({ salespersons }) => {
       <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 hover:shadow-xl transition-all duration-300">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-gray-600 uppercase tracking-wide">Total Invoices</p>
-            <p className="text-2xl font-bold text-blue-600">{totalInvoices}</p>
+            <p className="text-sm font-medium text-gray-600 uppercase tracking-wide">PKR Sales</p>
+            <p className="text-2xl font-bold text-blue-600">{smartFormat(currencyTotals["PKR"] || 0)}</p>
           </div>
           <div className="p-3 bg-blue-100 rounded-lg">
-            <span className="text-2xl">📄</span>
+            <span className="text-2xl">💵</span>
           </div>
         </div>
       </div>
@@ -125,11 +131,11 @@ const StatsOverview = ({ salespersons }) => {
       <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 hover:shadow-xl transition-all duration-300">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-gray-600 uppercase tracking-wide">Average Sale</p>
-            <p className="text-2xl font-bold text-purple-600">{smartFormat(avgSale)}</p>
+            <p className="text-sm font-medium text-gray-600 uppercase tracking-wide">AED Sales</p>
+            <p className="text-2xl font-bold text-purple-600">{smartFormat(currencyTotals["AED"] || 0)}</p>
           </div>
           <div className="p-3 bg-purple-100 rounded-lg">
-            <span className="text-2xl">📊</span>
+            <span className="text-2xl">💎</span>
           </div>
         </div>
       </div>
@@ -137,11 +143,11 @@ const StatsOverview = ({ salespersons }) => {
       <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 hover:shadow-xl transition-all duration-300">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-gray-600 uppercase tracking-wide">Top Performer</p>
-            <p className="text-lg font-bold text-orange-600">{topPerformer}</p>
+            <p className="text-sm font-medium text-gray-600 uppercase tracking-wide">Total Invoices</p>
+            <p className="text-2xl font-bold text-orange-600">{totalInvoices}</p>
           </div>
           <div className="p-3 bg-orange-100 rounded-lg">
-            <span className="text-2xl">🏆</span>
+            <span className="text-2xl">📄</span>
           </div>
         </div>
       </div>
@@ -168,25 +174,18 @@ function Salespersons() {
       setError(null);
       
       try {
-        // Fetch multiple pages of invoice data
-        const pages = [1]; // Get first page only to reduce API load
-        const responses = await Promise.all(
-          pages.map(page => cachedApiClient.get(`/invoices?page=${page}&pageSize=100`).catch(() => null))
-        );
-
-        // Combine all invoice data
-        const allInvoices = responses
-          .filter(res => res !== null)
-          .flatMap(res => res.data.data || []);
+        // Fetch ALL invoices for complete salesperson analytics
+        const response = await cachedApiClient.get(`/invoices?page=1&pageSize=-1`);
+        const allInvoices = response.data.data || [];
 
         // Process data to create salesperson analytics
         const salespersonData = {};
         
         allInvoices.forEach(inv => {
           const salespersonName = inv.salespersonName || "Unknown";
-          const employeeId = inv.invoice.employee_id || 0;
-          const total = inv.invoice.total || 0;
-          const currency = inv.invoice.currency || "USD";
+          const employeeId = inv.employeeId || 0;
+          const total = inv.total || 0;
+          const currency = inv.currency || "USD";
 
           if (!salespersonData[employeeId]) {
             salespersonData[employeeId] = {

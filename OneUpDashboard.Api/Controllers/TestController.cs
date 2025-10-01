@@ -1,30 +1,30 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using OneUpDashboard.Api.Services;
-using OneUpDashboard.Api.Data;
-using OneUpDashboard.Api.Models;
+using OneUpDashboard.Api.Models.MongoDb;
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
 
 namespace OneUpDashboard.Api.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class TestController : ControllerBase
     {
         private readonly DataSyncService _syncService;
         private readonly OneUpClient _oneUpClient;
-        private readonly DashboardDbContext _context;
+        private readonly MongoDbService _mongoDbService;
         private readonly ILogger<TestController> _logger;
 
         public TestController(
             DataSyncService syncService,
             OneUpClient oneUpClient,
-            DashboardDbContext context,
+            MongoDbService mongoDbService,
             ILogger<TestController> logger)
         {
             _syncService = syncService;
             _oneUpClient = oneUpClient;
-            _context = context;
+            _mongoDbService = mongoDbService;
             _logger = logger;
         }
 
@@ -55,28 +55,26 @@ namespace OneUpDashboard.Api.Controllers
         {
             try
             {
-                var invoiceCount = await _context.Invoices.CountAsync();
-                var sampleInvoices = await _context.Invoices
-                    .OrderByDescending(i => i.InvoiceDate)
-                    .Take(3)
-                    .Select(i => new { 
-                        i.Id, 
-                        i.InvoiceNumber, 
-                        i.CustomerName, 
-                        i.Total, 
-                        i.Currency,
-                        Date = i.InvoiceDate.ToString("yyyy-MM-dd")
-                    })
-                    .ToListAsync();
+                var invoiceCount = await _mongoDbService.GetInvoiceCountAsync();
+                var sampleInvoices = await _mongoDbService.GetInvoicesAsync(0, 3);
+
+                var sampleData = sampleInvoices.Select(i => new { 
+                    i.Id, 
+                    i.InvoiceNumber, 
+                    i.CustomerName, 
+                    i.Total, 
+                    i.Currency,
+                    Date = i.InvoiceDate.ToString("yyyy-MM-dd")
+                }).ToList();
 
                 return Ok(new {
                     success = true,
                     timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss UTC"),
                     database = new {
                         totalInvoices = invoiceCount,
-                        sampleInvoices = sampleInvoices
+                        sampleInvoices = sampleData
                     },
-                    message = $"Database has {invoiceCount} invoices. Frontend should be able to see this data!"
+                    message = $"MongoDB database has {invoiceCount} invoices. Frontend should be able to see this data!"
                 });
             }
             catch (Exception ex)
@@ -86,40 +84,35 @@ namespace OneUpDashboard.Api.Controllers
         }
 
         /// <summary>
-        /// Populate database with sample invoices from OneUp API (Fixed version)
+        /// Populate database with sample invoices from OneUp API (MongoDB version)
         /// </summary>
         [HttpPost("populate-db")]
         public async Task<IActionResult> PopulateDatabase()
         {
             try
             {
-                _logger.LogInformation("🚀 Populating database with sample invoices...");
-                
-                // Recreate database to ensure clean schema
-                await _context.Database.EnsureDeletedAsync();
-                await _context.Database.EnsureCreatedAsync();
-                _logger.LogInformation("✅ Database recreated with clean schema");
+                _logger.LogInformation("🚀 Populating MongoDB database with sample invoices...");
                 
                 // Fetch invoices from OneUp API
                 var jsonResponse = await _oneUpClient.GetInvoicesPageAsync(1, 20);
                 var jsonData = JsonSerializer.Deserialize<JsonElement>(jsonResponse);
                 
-                var invoices = new List<Invoice>();
+                var invoices = new List<InvoiceDocument>();
                 
                 if (jsonData.ValueKind == JsonValueKind.Array)
                 {
                     foreach (var invoiceElement in jsonData.EnumerateArray())
                     {
-                        var invoice = new Invoice
+                        var invoice = new InvoiceDocument
                         {
-                            // Don't set Id - let PostgreSQL auto-generate it
+                            Id = GetIntProperty(invoiceElement, "id"),
                             InvoiceNumber = GetStringProperty(invoiceElement, "user_code") ?? "INV-" + GetIntProperty(invoiceElement, "id"),
                             CustomerName = GetCustomerName(invoiceElement),
                             Currency = GetStringProperty(invoiceElement, "currency_iso_code") ?? "USD",
                             Total = GetDecimalProperty(invoiceElement, "total"),
                             InvoiceDate = GetDateProperty(invoiceElement, "date") ?? DateTime.UtcNow,
                             CreatedAt = GetDateProperty(invoiceElement, "created_at") ?? DateTime.UtcNow,
-                            EmployeeId = null, // Don't set EmployeeId to avoid foreign key issues
+                            EmployeeId = GetIntProperty(invoiceElement, "employee_id") > 0 ? GetIntProperty(invoiceElement, "employee_id") : null,
                             SalespersonName = "Employee " + GetIntProperty(invoiceElement, "employee_id"),
                             Status = "Active",
                             Description = GetStringProperty(invoiceElement, "public_note"),
@@ -131,9 +124,8 @@ namespace OneUpDashboard.Api.Controllers
                     }
                 }
                 
-                // Save to database
-                _context.Invoices.AddRange(invoices);
-                await _context.SaveChangesAsync();
+                // Save to MongoDB
+                await _mongoDbService.InsertInvoicesAsync(invoices);
                 
                 // Get summary stats
                 var totalByCurrency = invoices.GroupBy(i => i.Currency)
@@ -156,12 +148,12 @@ namespace OneUpDashboard.Api.Controllers
                         i.Currency,
                         Date = i.InvoiceDate.ToString("yyyy-MM-dd")
                     }),
-                    message = $"Successfully populated database with {invoices.Count} invoices!" 
+                    message = $"Successfully populated MongoDB database with {invoices.Count} invoices!" 
                 });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Database population failed");
+                _logger.LogError(ex, "MongoDB population failed");
                 return StatusCode(500, new { success = false, error = ex.Message, stackTrace = ex.StackTrace });
             }
         }

@@ -74,7 +74,7 @@ function Analytics() {
     salesByMonth: [],
     topCustomers: [],
     metrics: {
-      totalRevenue: 0,
+      currencyRevenue: {},
       totalInvoices: 0,
       averageInvoiceValue: 0,
       topSalesperson: ""
@@ -89,29 +89,23 @@ function Analytics() {
   const fetchAnalyticsData = async () => {
     setLoading(true);
     try {
-      // Fetch only 1 page to reduce API load
-      const pages = [1]; // Get first page only for faster loading
-      const responses = await Promise.all(
-        pages.map(page => cachedApiClient.get(`/invoices?page=${page}&pageSize=100`))
-      );
-
-      // Combine all invoice data
-      const allInvoices = responses.flatMap(res => res.data.data || []);
+      // Fetch ALL invoices for complete analytics
+      const response = await cachedApiClient.get(`/invoices?page=1&pageSize=-1`);
+      const allInvoices = response.data.data || [];
       
       // Process data for analytics
       const salesByPerson = {};
       const salesByCurrency = {};
       const customerSales = {};
       const monthlySales = {};
-      
-      let totalRevenue = 0;
+      const currencyRevenue = {};
 
       allInvoices.forEach(inv => {
         const salesperson = inv.salespersonName || "Unknown";
-        const currency = inv.invoice.currency || "USD";
-        const customer = inv.invoice.customerName || "Unknown";
-        const total = inv.invoice.total || 0;
-        const date = inv.invoice.invoice_date || "";
+        const currency = inv.currency || "USD";
+        const customer = inv.customerName || "Unknown";
+        const total = parseFloat(inv.total || 0);
+        const date = inv.invoiceDate || "";
         const month = date.slice(0, 7); // YYYY-MM format
 
         // Sales by person
@@ -120,6 +114,9 @@ function Analytics() {
         // Sales by currency
         salesByCurrency[currency] = (salesByCurrency[currency] || 0) + total;
         
+        // Currency revenue (separate totals)
+        currencyRevenue[currency] = (currencyRevenue[currency] || 0) + total;
+        
         // Top customers
         customerSales[customer] = (customerSales[customer] || 0) + total;
         
@@ -127,8 +124,6 @@ function Analytics() {
         if (month) {
           monthlySales[month] = (monthlySales[month] || 0) + total;
         }
-        
-        totalRevenue += total;
       });
 
       // Convert to chart data format
@@ -157,9 +152,9 @@ function Analytics() {
         salesByMonth: salesByMonthData,
         topCustomers: topCustomersData,
         metrics: {
-          totalRevenue,
+          currencyRevenue,
           totalInvoices: allInvoices.length,
-          averageInvoiceValue: totalRevenue / allInvoices.length,
+          averageInvoiceValue: currencyRevenue["USD"] / allInvoices.filter(inv => inv.currency === "USD").length || 0,
           topSalesperson: salesByPersonData[0]?.label || "Unknown"
         }
       });
@@ -231,30 +226,30 @@ function Analytics() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
               <MetricCard
                 icon="💰"
-                title="Total Revenue"
-                value={smartFormat(data.metrics.totalRevenue)}
-                change="+12.5%"
+                title="USD Revenue"
+                value={smartFormat(data.metrics.currencyRevenue?.USD || 0)}
+                change="USD Sales"
+                trend="up"
+              />
+              <MetricCard
+                icon="💵"
+                title="PKR Revenue"
+                value={smartFormat(data.metrics.currencyRevenue?.PKR || 0)}
+                change="PKR Sales"
+                trend="up"
+              />
+              <MetricCard
+                icon="💎"
+                title="AED Revenue"
+                value={smartFormat(data.metrics.currencyRevenue?.AED || 0)}
+                change="AED Sales"
                 trend="up"
               />
               <MetricCard
                 icon="📄"
                 title="Total Invoices"
                 value={data.metrics.totalInvoices.toLocaleString()}
-                change="+8.2%"
-                trend="up"
-              />
-              <MetricCard
-                icon="📊"
-                title="Avg Invoice Value"
-                value={smartFormat(data.metrics.averageInvoiceValue)}
-                change="+3.1%"
-                trend="up"
-              />
-              <MetricCard
-                icon="🏆"
-                title="Top Performer"
-                value={data.metrics.topSalesperson}
-                change="Leading"
+                change="All currencies"
                 trend="up"
               />
             </div>

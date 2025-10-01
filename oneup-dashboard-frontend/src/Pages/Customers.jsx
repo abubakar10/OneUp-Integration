@@ -119,33 +119,20 @@ function Customers() {
     setLoading(true);
     setError(null);
     try {
-      // Fetch multiple pages to get comprehensive customer data
-      const pages = [1]; // Single page only to reduce API load
-      console.log("🏢 Fetching customer data from invoices...");
+      // Fetch ALL invoices for complete customer analytics
+      console.log("🏢 Fetching ALL customer data from invoices...");
       
-      const responses = await Promise.all(
-        pages.map(page => 
-          cachedApiClient.get(`/invoices?page=${page}&pageSize=100`)
-            .catch(err => {
-              console.log(`Page ${page} failed:`, err.message);
-              return null;
-            })
-        )
-      );
-
-      // Combine all invoice data
-      const allInvoices = responses
-        .filter(res => res !== null)
-        .flatMap(res => res.data.data || []);
+      const response = await cachedApiClient.get(`/invoices?page=1&pageSize=-1`);
+      const allInvoices = response.data.data || [];
       
       // Process data to create customer analytics
       const customerData = {};
       
       allInvoices.forEach(inv => {
-        const customerId = inv.invoice.id;
-        const customerName = inv.invoice.customerName || "Unknown Customer";
-        const total = inv.invoice.total || 0;
-        const currency = inv.invoice.currency || "USD";
+        const customerId = inv.id;
+        const customerName = inv.customerName || "Unknown Customer";
+        const total = inv.total || 0;
+        const currency = inv.currency || "USD";
 
         if (!customerData[customerId]) {
           customerData[customerId] = {

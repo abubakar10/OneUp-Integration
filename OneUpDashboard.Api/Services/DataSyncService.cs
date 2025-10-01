@@ -1,22 +1,20 @@
-using Microsoft.EntityFrameworkCore;
-using OneUpDashboard.Api.Data;
-using OneUpDashboard.Api.Models;
+using OneUpDashboard.Api.Models.MongoDb;
 using System.Text.Json;
 
 namespace OneUpDashboard.Api.Services
 {
     public class DataSyncService
     {
-        private readonly DashboardDbContext _context;
+        private readonly MongoDbService _mongoDbService;
         private readonly OneUpClient _oneUpClient;
         private readonly ILogger<DataSyncService> _logger;
 
         public DataSyncService(
-            DashboardDbContext context,
+            MongoDbService mongoDbService,
             OneUpClient oneUpClient,
             ILogger<DataSyncService> logger)
         {
-            _context = context;
+            _mongoDbService = mongoDbService;
             _oneUpClient = oneUpClient;
             _logger = logger;
         }
@@ -27,22 +25,21 @@ namespace OneUpDashboard.Api.Services
         /// </summary>
         public async Task<SyncResult> SyncAllInvoicesAsync()
         {
-            var syncLog = new SyncLog
+            var syncLog = new SyncLogDocument
             {
                 SyncType = "invoices",
                 StartTime = DateTime.UtcNow,
                 Status = "running"
             };
 
-            _context.SyncLogs.Add(syncLog);
-            await _context.SaveChangesAsync();
+            await _mongoDbService.InsertSyncLogAsync(syncLog);
 
             try
             {
                 _logger.LogInformation("🔄 Starting full sync of OneUp invoices...");
 
-                // Step 1: Sync employees first (for salesperson names)
-                await SyncEmployeesAsync();
+                // Step 1: Sync employees first (for salesperson names) - Temporarily disabled
+                // await SyncEmployeesAsync();
 
                 // Step 2: Sync invoices with smart pagination loop
                 var result = await SyncInvoicesWithPaginationAsync(syncLog);
@@ -56,7 +53,7 @@ namespace OneUpDashboard.Api.Services
                 syncLog.DurationSeconds = (int)(syncLog.EndTime.Value - syncLog.StartTime).TotalSeconds;
                 syncLog.Notes = $"Successfully synced {result.TotalInvoices} invoices in {result.ApiCalls} API calls";
 
-                await _context.SaveChangesAsync();
+                await _mongoDbService.UpdateSyncLogAsync(syncLog);
 
                 _logger.LogInformation("✅ Sync complete! Total invoices: {TotalInvoices}", result.TotalInvoices);
 
@@ -71,7 +68,7 @@ namespace OneUpDashboard.Api.Services
                 syncLog.ErrorMessage = ex.Message;
                 syncLog.DurationSeconds = (int)(syncLog.EndTime.Value - syncLog.StartTime).TotalSeconds;
 
-                await _context.SaveChangesAsync();
+                await _mongoDbService.UpdateSyncLogAsync(syncLog);
 
                 throw;
             }
@@ -80,19 +77,22 @@ namespace OneUpDashboard.Api.Services
         /// <summary>
         /// Smart pagination loop - fetches ALL invoices respecting OneUp API's 100-record limit
         /// </summary>
-        private async Task<SyncResult> SyncInvoicesWithPaginationAsync(SyncLog syncLog)
+        private async Task<SyncResult> SyncInvoicesWithPaginationAsync(SyncLogDocument syncLog)
         {
             var result = new SyncResult();
-            var batchInvoices = new List<Invoice>();
+            var batchInvoices = new List<InvoiceDocument>();
             const int batchSize = 500; // Save to DB every 500 invoices (5 API calls)
 
             int page = 1;
             bool hasMoreData = true;
 
             // Get existing invoice IDs to avoid duplicates
-            var existingInvoiceIds = (await _context.Invoices
-                .Select(i => i.Id)
-                .ToListAsync()).ToHashSet();
+            var existingInvoiceIds = new HashSet<int>();
+            var allInvoices = await _mongoDbService.GetInvoicesAsync(0, int.MaxValue);
+            foreach (var invoice in allInvoices)
+            {
+                existingInvoiceIds.Add(invoice.Id);
+            }
 
             while (hasMoreData)
             {
@@ -151,7 +151,7 @@ namespace OneUpDashboard.Api.Services
                     // Update sync log progress
                     syncLog.ProcessedRecords = result.ProcessedInvoices;
                     syncLog.LastPageProcessed = page;
-                    await _context.SaveChangesAsync();
+                    await _mongoDbService.UpdateSyncLogAsync(syncLog);
 
                     // Be nice to the API - small delay between requests
                     await Task.Delay(500);
@@ -186,7 +186,7 @@ namespace OneUpDashboard.Api.Services
         /// <summary>
         /// Process a single invoice element from the API response
         /// </summary>
-        private async Task<Invoice?> ProcessInvoiceElementAsync(JsonElement invoiceElement, HashSet<int> existingIds)
+        private async Task<InvoiceDocument?> ProcessInvoiceElementAsync(JsonElement invoiceElement, HashSet<int> existingIds)
         {
             try
             {
@@ -202,7 +202,7 @@ namespace OneUpDashboard.Api.Services
                     return null;
                 }
 
-                var invoice = new Invoice
+                var invoice = new InvoiceDocument
                 {
                     Id = invoiceId,
                     InvoiceNumber = GetStringProperty(invoiceElement, "user_code") ?? GetStringProperty(invoiceElement, "invoice_number") ?? $"INV-{invoiceId}",
@@ -244,7 +244,7 @@ namespace OneUpDashboard.Api.Services
                     invoice.EmployeeId = employeeId;
                     
                     // Try to get salesperson name from our employee cache/database
-                    var employee = await _context.Employees.FindAsync(employeeId);
+                    var employee = await _mongoDbService.GetEmployeeByIdAsync(employeeId);
                     if (employee != null)
                     {
                         invoice.SalespersonName = employee.FullName;
@@ -279,14 +279,13 @@ namespace OneUpDashboard.Api.Services
         /// <summary>
         /// Save a batch of invoices to the database efficiently
         /// </summary>
-        private async Task SaveInvoiceBatchAsync(List<Invoice> invoices)
+        private async Task SaveInvoiceBatchAsync(List<InvoiceDocument> invoices)
         {
             if (invoices.Count == 0) return;
 
             try
             {
-                _context.Invoices.AddRange(invoices);
-                await _context.SaveChangesAsync();
+                await _mongoDbService.InsertInvoicesAsync(invoices);
             }
             catch (Exception ex)
             {
@@ -304,11 +303,78 @@ namespace OneUpDashboard.Api.Services
             {
                 _logger.LogInformation("👥 Syncing employees...");
 
-                // For now, we'll rely on the employee cache in OneUpClient
-                // In a full implementation, you might want to fetch all employees here
-                await _oneUpClient.PreloadEmployeeCacheAsync();
+                // Get all employees from OneUp API
+                var allEmployees = new List<EmployeeDocument>();
+                int page = 1;
+                bool hasMoreData = true;
 
-                _logger.LogInformation("✅ Employee sync completed");
+                while (hasMoreData)
+                {
+                    try
+                    {
+                        _logger.LogInformation("📥 Fetching employees page {Page}...", page);
+
+                        // Fetch employees from OneUp API (assuming they have an employees endpoint)
+                        var apiResponse = await _oneUpClient.GetEmployeesPageAsync(page, 100);
+                        var jsonData = JsonSerializer.Deserialize<JsonElement>(apiResponse);
+
+                        if (jsonData.ValueKind != JsonValueKind.Array)
+                        {
+                            _logger.LogWarning("⚠️ Unexpected employee API response format on page {Page}", page);
+                            break;
+                        }
+
+                        var pageEmployees = jsonData.EnumerateArray().ToList();
+                        
+                        // Check if this is the last page
+                        if (pageEmployees.Count < 100)
+                        {
+                            hasMoreData = false;
+                            _logger.LogInformation("📄 Last employee page reached. Found {Count} employees on page {Page}", pageEmployees.Count, page);
+                        }
+
+                        if (pageEmployees.Count == 0)
+                        {
+                            _logger.LogInformation("📄 No more employees found. Stopping at page {Page}", page);
+                            break;
+                        }
+
+                        // Process each employee in this page
+                        foreach (var employeeElement in pageEmployees)
+                        {
+                            var employee = ProcessEmployeeElement(employeeElement);
+                            if (employee != null)
+                            {
+                                allEmployees.Add(employee);
+                            }
+                        }
+
+                        // Be nice to the API - small delay between requests
+                        await Task.Delay(500);
+                        page++;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "❌ Error processing employee page {Page}: {Message}", page, ex.Message);
+                        page++;
+                        if (page > 10) // Safety limit
+                        {
+                            _logger.LogError("❌ Too many failed employee pages. Stopping.");
+                            break;
+                        }
+                    }
+                }
+
+                // Save all employees to MongoDB
+                if (allEmployees.Count > 0)
+                {
+                    await _mongoDbService.InsertEmployeesAsync(allEmployees);
+                    _logger.LogInformation("✅ Employee sync completed. Saved {Count} employees", allEmployees.Count);
+                }
+                else
+                {
+                    _logger.LogWarning("⚠️ No employees found to sync");
+                }
             }
             catch (Exception ex)
             {
@@ -317,25 +383,57 @@ namespace OneUpDashboard.Api.Services
         }
 
         /// <summary>
+        /// Process a single employee element from the API response
+        /// </summary>
+        private static EmployeeDocument? ProcessEmployeeElement(JsonElement employeeElement)
+        {
+            try
+            {
+                if (!employeeElement.TryGetProperty("id", out var idElement) ||
+                    !idElement.TryGetInt32(out var employeeId))
+                {
+                    return null;
+                }
+
+                var employee = new EmployeeDocument
+                {
+                    Id = employeeId,
+                    FirstName = GetStringProperty(employeeElement, "first_name") ?? GetStringProperty(employeeElement, "firstName") ?? "Unknown",
+                    LastName = GetStringProperty(employeeElement, "last_name") ?? GetStringProperty(employeeElement, "lastName") ?? "Employee",
+                    Email = GetStringProperty(employeeElement, "email"),
+                    Phone = GetStringProperty(employeeElement, "phone"),
+                    Department = GetStringProperty(employeeElement, "department"),
+                    Position = GetStringProperty(employeeElement, "position"),
+                    IsActive = GetStringProperty(employeeElement, "status")?.ToLower() != "inactive",
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+
+                return employee;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"⚠️ Failed to process employee element: {ex.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
         /// Get the latest sync status
         /// </summary>
         public async Task<SyncStatus> GetSyncStatusAsync()
         {
-            var latestSync = await _context.SyncLogs
-                .Where(s => s.SyncType == "invoices")
-                .OrderByDescending(s => s.StartTime)
-                .FirstOrDefaultAsync();
-
-            var totalInvoices = await _context.Invoices.CountAsync();
-            var totalEmployees = await _context.Employees.CountAsync();
+            var latestSync = await _mongoDbService.GetLatestSyncLogAsync();
+            var totalInvoices = await _mongoDbService.GetInvoiceCountAsync();
+            var totalEmployees = await _mongoDbService.GetEmployeeCountAsync();
 
             return new SyncStatus
             {
                 IsRunning = latestSync?.Status == "running",
                 LastSync = latestSync?.StartTime,
                 LastSyncStatus = latestSync?.Status ?? "never",
-                TotalInvoices = totalInvoices,
-                TotalEmployees = totalEmployees,
+                TotalInvoices = (int)totalInvoices,
+                TotalEmployees = (int)totalEmployees,
                 Duration = latestSync?.DurationSeconds,
                 ErrorMessage = latestSync?.ErrorMessage
             };

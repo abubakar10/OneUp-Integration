@@ -1,18 +1,18 @@
 import { useEffect, useState } from "react";
 import cachedApiClient from "../api/cachedApiClient";
 
-// Enhanced Spinner with cache status
-const Spinner = ({ isFromCache = false, pageSize = 100 }) => (
+// Enhanced Spinner
+const Spinner = ({ pageSize = 100 }) => (
   <div className="flex flex-col justify-center items-center h-screen w-full bg-gradient-to-br from-blue-50 to-indigo-100">
     <div className="relative">
       <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
       <div className="w-12 h-12 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin absolute top-2 left-2 animate-pulse"></div>
     </div>
     <p className="mt-4 text-gray-600 font-medium">
-      {isFromCache ? "📦 Loading from cache..." : `🌐 Fetching ${pageSize} invoices...`}
+      🌐 Fetching {pageSize} invoices...
     </p>
     <div className="mt-2 text-sm text-gray-500">
-      {isFromCache ? "Lightning fast!" : "Please wait, this may take a moment"}
+      Please wait, this may take a moment
     </div>
   </div>
 );
@@ -47,22 +47,22 @@ const InvoiceCard = ({ invoice, index, page, pageSize }) => (
   <div className="bg-white rounded-lg shadow-md border border-gray-200 p-6 hover:shadow-lg transition-all duration-300 hover:border-blue-300">
     <div className="flex justify-between items-start mb-4">
       <div>
-        <h3 className="font-semibold text-gray-900 text-lg">#{invoice.invoice.invoiceNumber || invoice.invoice.id}</h3>
+        <h3 className="font-semibold text-gray-900 text-lg">#{invoice.invoiceNumber || invoice.id}</h3>
         <p className="text-sm text-gray-500">Invoice #{(page - 1) * pageSize + (index + 1)}</p>
       </div>
       <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-        invoice.invoice.currency === 'USD' ? 'bg-green-100 text-green-800' :
-        invoice.invoice.currency === 'PKR' ? 'bg-blue-100 text-blue-800' :
+        invoice.currency === 'USD' ? 'bg-green-100 text-green-800' :
+        invoice.currency === 'PKR' ? 'bg-blue-100 text-blue-800' :
         'bg-purple-100 text-purple-800'
       }`}>
-        {invoice.invoice.currency}
+        {invoice.currency}
       </span>
     </div>
     
     <div className="space-y-3">
       <div className="flex justify-between">
         <span className="text-gray-600">Customer:</span>
-        <span className="font-medium text-gray-900 text-right">{invoice.invoice.customerName}</span>
+        <span className="font-medium text-gray-900 text-right">{invoice.customerName}</span>
       </div>
       <div className="flex justify-between">
         <span className="text-gray-600">Salesperson:</span>
@@ -70,18 +70,17 @@ const InvoiceCard = ({ invoice, index, page, pageSize }) => (
       </div>
       <div className="flex justify-between">
         <span className="text-gray-600">Date:</span>
-        <span className="font-medium text-gray-900">{invoice.invoice.invoice_date?.slice(0, 10) || "—"}</span>
+        <span className="font-medium text-gray-900">{invoice.invoiceDate?.slice(0, 10) || "—"}</span>
       </div>
       <div className="flex justify-between items-center pt-2 border-t border-gray-100">
         <span className="text-gray-600 font-medium">Total:</span>
-                        <span className="text-xl font-bold text-green-600">{parseFloat(invoice.invoice.total || 0).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</span>
+                        <span className="text-xl font-bold text-green-600">{parseFloat(invoice.total || 0).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</span>
       </div>
     </div>
   </div>
 );
 
 function Dashboard() {
-  const [invoices, setInvoices] = useState([]);
   const [currency, setCurrency] = useState("All");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -89,38 +88,72 @@ function Dashboard() {
   const [viewMode, setViewMode] = useState("table"); // table or cards
   const [sortBy, setSortBy] = useState("invoiceDate"); // invoiceDate or creationDate
 
-  // ✅ Pagination state for OneUp API (100 records max per page)
+  // ✅ Pagination state for OneUp API (all records in one call)
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(100); // 100 invoices per page as requested
+  const [pageSize, setPageSize] = useState(100); // Frontend pagination: 100 invoices per page
   const [hasMorePages, setHasMorePages] = useState(false);
+  const [totalCount, setTotalCount] = useState(0);
+  
+  // ✅ Frontend pagination state
+  const [allInvoices, setAllInvoices] = useState([]); // Store all loaded invoices
+  const [currentPageInvoices, setCurrentPageInvoices] = useState([]); // Current page invoices
 
-  // ✅ Caching state for faster loading
-  const [cache, setCache] = useState(new Map());
-  const [isFromCache, setIsFromCache] = useState(false);
 
   // ✅ Dashboard statistics
   const [stats, setStats] = useState({
-    totalSales: 0,
+    currencySales: {},
     totalInvoices: 0,
     avgSale: 0,
     topSalesperson: ""
   });
 
+  // ✅ Sales summary from all invoices
+  const [salesSummary, setSalesSummary] = useState({
+    totalSales: 0,
+    totalInvoices: 0,
+    averageSale: 0,
+    salesByCurrency: {},
+    currencyBreakdown: {}
+  });
+
+  // ✅ Time-based currency sales
+  const [timePeriod, setTimePeriod] = useState("all");
+  const [currencySalesData, setCurrencySalesData] = useState({
+    timePeriod: "all",
+    totalSales: 0,
+    currencySales: {
+      USD: { totalSales: 0, invoiceCount: 0, averageSale: 0, percentage: 0 },
+      PKR: { totalSales: 0, invoiceCount: 0, averageSale: 0, percentage: 0 },
+      AED: { totalSales: 0, invoiceCount: 0, averageSale: 0, percentage: 0 }
+    },
+    summary: {
+      usdTotal: 0,
+      pkrTotal: 0,
+      aedTotal: 0,
+      otherTotal: 0
+    }
+  });
+
   // Calculate stats from current page data
   useEffect(() => {
-    if (invoices.length > 0) {
-      const totalSales = invoices.reduce((sum, inv) => {
-        const total = parseFloat(inv.invoice?.total || 0);
-        return sum + (isNaN(total) ? 0 : total);
-      }, 0);
+    if (currentPageInvoices.length > 0) {
+      // Calculate sales by currency
+      const currencySales = {};
+      currentPageInvoices.forEach(inv => {
+        const currency = inv.currency || "USD";
+        const total = parseFloat(inv.total || 0);
+        currencySales[currency] = (currencySales[currency] || 0) + (isNaN(total) ? 0 : total);
+      });
       
-      const avgSale = totalSales / invoices.length;
+      // Calculate average sale (using USD as reference for display)
+      const usdSales = currencySales["USD"] || 0;
+      const avgSale = usdSales / currentPageInvoices.filter(inv => inv.currency === "USD").length || 0;
       
       // Find top salesperson on current page
       const salespersonSales = {};
-      invoices.forEach(inv => {
+      currentPageInvoices.forEach(inv => {
         const name = inv.salespersonName || "Unknown";
-        const total = parseFloat(inv.invoice?.total || 0);
+        const total = parseFloat(inv.total || 0);
         salespersonSales[name] = (salespersonSales[name] || 0) + (isNaN(total) ? 0 : total);
       });
       
@@ -128,35 +161,164 @@ function Dashboard() {
         .sort(([,a], [,b]) => b - a)[0]?.[0] || "Unknown";
 
       setStats({
-        totalSales: isNaN(totalSales) ? 0 : totalSales,
-        totalInvoices: invoices.length,
+        currencySales,
+        totalInvoices: totalCount,
         avgSale: isNaN(avgSale) ? 0 : avgSale,
         topSalesperson
       });
     } else {
       setStats({
-        totalSales: 0,
+        currencySales: {},
         totalInvoices: 0,
         avgSale: 0,
         topSalesperson: "Unknown"
       });
     }
-  }, [invoices]);
+  }, [currentPageInvoices, totalCount]);
 
-  // ✅ Direct API fetching without caching issues
+  // ✅ Fetch sales summary from all invoices (with caching)
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
+    const fetchSalesSummary = async () => {
+      // Check cache first
+      const cacheKey = 'dashboard-sales-summary';
+      const cachedSummary = sessionStorage.getItem(cacheKey);
       
-      const q = currency === "All" ? "" : `&currency=${currency}`;
-      const sortParam = `&sortBy=${sortBy}`;
+      if (cachedSummary) {
+        try {
+          const parsedSummary = JSON.parse(cachedSummary);
+          console.log('📦 Loading cached sales summary');
+          setSalesSummary(parsedSummary);
+          return;
+        } catch (error) {
+          console.warn("Failed to parse cached sales summary:", error);
+        }
+      }
 
       try {
-        console.log(`🔄 Fetching invoices: page=${page}, pageSize=${pageSize}, currency=${currency}, sortBy=${sortBy}`);
+        console.log('🔄 Fetching sales summary from all invoices...');
+        const response = await cachedApiClient.get('/invoices/sales-summary', { useCache: true });
+        const summary = response.data;
         
-        // Direct API call without caching to avoid issues
-        const response = await cachedApiClient.get(`/invoices?page=${page}&pageSize=${pageSize}${q}${sortParam}`, { useCache: false });
+        console.log('📊 Sales Summary:', summary);
+        
+        // Cache the summary
+        sessionStorage.setItem(cacheKey, JSON.stringify(summary));
+        console.log('💾 Cached sales summary');
+        
+        setSalesSummary(summary);
+      } catch (err) {
+        console.error("❌ Error fetching sales summary:", err);
+        // Fallback to empty data if API fails
+        setSalesSummary({
+          totalSales: 0,
+          totalInvoices: 0,
+          averageSale: 0,
+          salesByCurrency: {},
+          currencyBreakdown: {}
+        });
+      }
+    };
+    
+    fetchSalesSummary();
+  }, []); // Run once on component mount
+
+  // ✅ Fetch currency sales by time period
+  useEffect(() => {
+    const fetchCurrencySales = async () => {
+      try {
+        console.log(`🔄 Fetching currency sales for time period: ${timePeriod}`);
+        
+        // Try manual calculation endpoint first
+        let response;
+        try {
+          response = await cachedApiClient.get('/invoices/manual-currency-totals', { useCache: true });
+          console.log('✅ Using manual calculation endpoint');
+        } catch (manualErr) {
+          console.log('⚠️ Manual endpoint failed, trying original endpoint:', manualErr.message);
+          response = await cachedApiClient.get(`/invoices/currency-sales?timePeriod=${timePeriod}`, { useCache: true });
+        }
+        
+        const data = response.data;
+        
+        console.log('💱 Currency Sales Data:', data);
+        console.log('📊 Manual Totals:', data.manualTotals);
+        console.log('📈 Detailed Stats:', data.detailedStats);
+        
+        setCurrencySalesData(data);
+      } catch (err) {
+        console.error("❌ Error fetching currency sales:", err);
+        // Fallback to empty data if API fails
+        setCurrencySalesData({
+          timePeriod: timePeriod,
+          totalSales: 0,
+          currencySales: {
+            USD: { totalSales: 0, invoiceCount: 0, averageSale: 0, percentage: 0 },
+            PKR: { totalSales: 0, invoiceCount: 0, averageSale: 0, percentage: 0 },
+            AED: { totalSales: 0, invoiceCount: 0, averageSale: 0, percentage: 0 }
+          },
+          summary: {
+            usdTotal: 0,
+            pkrTotal: 0,
+            aedTotal: 0,
+            otherTotal: 0
+          }
+        });
+      }
+    };
+    
+    fetchCurrencySales();
+  }, [timePeriod]); // Run when time period changes
+
+  // ✅ Fetch debug data to check what's in the database
+  useEffect(() => {
+    const fetchDebugData = async () => {
+      try {
+        console.log('🔍 Fetching debug data...');
+        const response = await cachedApiClient.get('/invoices/debug-data', { useCache: false });
+        const debugData = response.data;
+        
+        console.log('🐛 Debug Data:', debugData);
+        console.log('📊 Sample Invoices:', debugData.sampleInvoices);
+        console.log('💱 Currency Breakdown:', debugData.currencyBreakdown);
+        console.log('💰 Total Sales by Currency:', debugData.totalSalesByCurrency);
+        console.log('📈 Total Sales:', debugData.totalSales);
+        console.log('📋 Has Data:', debugData.hasData);
+      } catch (err) {
+        console.error("❌ Error fetching debug data:", err);
+      }
+    };
+    
+    fetchDebugData();
+  }, []); // Run once on component mount
+
+  // ✅ Load all invoices once, then paginate on frontend (with persistent caching)
+  useEffect(() => {
+    const fetchAllInvoices = async () => {
+      // Check if we already have data cached
+      const cacheKey = `dashboard-invoices-${sortBy}`;
+      const cachedData = sessionStorage.getItem(cacheKey);
+      
+      if (cachedData && !loading) {
+        try {
+          const parsedData = JSON.parse(cachedData);
+          console.log(`📦 Loading cached invoices: ${parsedData.length} invoices`);
+          setAllInvoices(parsedData);
+          setTotalCount(parsedData.length);
+          setLoading(false);
+          return;
+        } catch (error) {
+          console.warn("Failed to parse cached data:", error);
+        }
+      }
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        console.log(`🔄 Fetching ALL invoices: currency=${currency}, sortBy=${sortBy}`);
+        
+        // Fetch ALL invoices in one call (with caching enabled)
+        const response = await cachedApiClient.get(`/invoices?page=1&pageSize=-1&sortBy=${sortBy}`, { useCache: true });
         const meta = response.data;
 
         console.log('📊 API Response:', meta);
@@ -165,44 +327,134 @@ function Dashboard() {
         if (meta.error) {
           console.error('❌ API Error:', meta.error);
           setError(meta.error);
-          setInvoices([]);
-          setHasMorePages(false);
+          setAllInvoices([]);
+          setCurrentPageInvoices([]);
           setLoading(false);
           return;
         }
 
-        // Set invoices data
-        const invoicesData = meta.data || [];
-        console.log(`✅ Setting ${invoicesData.length} invoices`);
-        setInvoices(invoicesData);
-        setHasMorePages(meta.hasMorePages || false);
+        // Get all invoices data
+        let invoicesData = meta.data || [];
+        
+        // Try to cache the raw data (before currency filtering)
+        safeSetStorage(cacheKey, invoicesData);
+        
+        // Filter by currency if not "All"
+        if (currency !== "All") {
+          invoicesData = invoicesData.filter(inv => inv.currency === currency);
+        }
+        
+        console.log(`✅ Loaded ${invoicesData.length} total invoices`);
+        setAllInvoices(invoicesData);
+        setTotalCount(invoicesData.length);
         
         setLoading(false);
       } catch (err) {
         console.error("❌ Error fetching invoices:", err);
         setError(`Failed to fetch invoices: ${err.message}`);
+        setAllInvoices([]);
+        setCurrentPageInvoices([]);
         setLoading(false);
       }
     };
     
-    fetchData();
-  }, [currency, page, pageSize, sortBy]);
+    fetchAllInvoices();
+  }, [currency, sortBy]); // Only re-fetch when currency or sort changes
 
-  // Update cache stats for display
+  // ✅ Cache invalidation function
+  const clearDashboardCache = () => {
+    const keys = [
+      'dashboard-invoices-invoiceDate',
+      'dashboard-invoices-creationDate', 
+      'dashboard-sales-summary',
+      'dashboard-currency-sales-all',
+      'dashboard-currency-sales-month',
+      'dashboard-currency-sales-quarter',
+      'dashboard-currency-sales-year'
+    ];
+    
+    keys.forEach(key => {
+      sessionStorage.removeItem(key);
+    });
+    
+    console.log('🗑️ Cleared dashboard cache');
+  };
+
+  // ✅ Data compression utility
+  const compressData = (data) => {
+    try {
+      // Remove unnecessary fields to reduce size
+      const compressed = data.map(inv => ({
+        id: inv.id,
+        invoiceNumber: inv.invoiceNumber,
+        customerName: inv.customerName,
+        salespersonName: inv.salespersonName,
+        total: inv.total,
+        currency: inv.currency,
+        invoiceDate: inv.invoiceDate,
+        createdAt: inv.createdAt
+      }));
+      return JSON.stringify(compressed);
+    } catch (error) {
+      console.warn('Failed to compress data:', error);
+      return null;
+    }
+  };
+
+  // ✅ Safe storage function with fallback
+  const safeSetStorage = (key, data) => {
+    try {
+      const compressed = compressData(data);
+      if (compressed) {
+        sessionStorage.setItem(key, compressed);
+        console.log(`💾 Cached ${data.length} invoices (compressed)`);
+        return true;
+      }
+    } catch (error) {
+      if (error.name === 'QuotaExceededError') {
+        console.warn('⚠️ Storage quota exceeded, skipping cache');
+        // Clear old cache and try again
+        clearDashboardCache();
+        try {
+          const compressed = compressData(data);
+          if (compressed) {
+            sessionStorage.setItem(key, compressed);
+            console.log(`💾 Cached ${data.length} invoices after clearing old cache`);
+            return true;
+          }
+        } catch (retryError) {
+          console.warn('⚠️ Still unable to cache data:', retryError);
+        }
+      }
+    }
+    return false;
+  };
   useEffect(() => {
-    const stats = cachedApiClient.getCacheStats();
-    setCache(new Map(stats.keys.map((key) => [key, { timestamp: Date.now() }])));
-  }, [invoices]);
+    if (allInvoices.length > 0) {
+      const startIndex = (page - 1) * pageSize;
+      const endIndex = startIndex + pageSize;
+      const pageInvoices = allInvoices.slice(startIndex, endIndex);
+      
+      setCurrentPageInvoices(pageInvoices);
+      setHasMorePages(endIndex < allInvoices.length);
+      
+      console.log(`📄 Page ${page}: Showing ${pageInvoices.length} invoices (${startIndex + 1}-${Math.min(endIndex, allInvoices.length)} of ${allInvoices.length})`);
+    } else {
+      setCurrentPageInvoices([]);
+      setHasMorePages(false);
+    }
+  }, [allInvoices, page, pageSize]);
+
 
   // Filter invoices based on search term
-  const filteredInvoices = invoices.filter(inv => 
+  const filteredInvoices = currentPageInvoices.filter(inv => 
     !searchTerm || 
-    inv.invoice.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    inv.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     inv.salespersonName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    inv.invoice.invoiceNumber?.toString().includes(searchTerm)
+    inv.invoiceNumber?.toString().includes(searchTerm)
   );
 
-  if (loading) return <Spinner isFromCache={isFromCache} pageSize={pageSize} />;
+  if (loading) return <Spinner pageSize={pageSize} />;
   if (error) return (
     <div className="flex flex-col items-center justify-center h-screen bg-gradient-to-br from-red-50 to-red-100">
       <div className="bg-white p-8 rounded-xl shadow-lg border border-red-200">
@@ -234,8 +486,8 @@ function Dashboard() {
             <div className="flex gap-2 flex-shrink-0">
               <button
                 onClick={() => {
+                  clearDashboardCache();
                   cachedApiClient.clearCache();
-                  setCache(new Map());
                   window.location.reload();
                 }}
                 className="px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center gap-2 text-sm"
@@ -259,33 +511,254 @@ function Dashboard() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <StatsCard
             icon="💰"
-            title="Total Sales"
-            value={stats.totalSales.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-            subtitle="Current page"
+            title="USD Sales"
+            value={currencySalesData.currencySales?.USD?.totalSales?.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || "0"}
+            subtitle="USD invoices"
             color="green"
           />
           <StatsCard
-            icon="📄"
-            title="Invoices"
-            value={stats.totalInvoices}
-            subtitle={hasMorePages ? "More available" : "All shown"}
+            icon="💵"
+            title="PKR Sales"
+            value={currencySalesData.currencySales?.PKR?.totalSales?.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || "0"}
+            subtitle="PKR invoices"
             color="blue"
           />
           <StatsCard
-            icon="📈"
-            title="Average Sale"
-            value={stats.avgSale.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-            subtitle="Per invoice"
+            icon="💎"
+            title="AED Sales"
+            value={currencySalesData.currencySales?.AED?.totalSales?.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || "0"}
+            subtitle="AED invoices"
             color="purple"
           />
           <StatsCard
-            icon="🏆"
-            title="Top Salesperson"
-            value={stats.topSalesperson}
-            subtitle="Current page"
+            icon="📄"
+            title="Total Invoices"
+            value={salesSummary.totalInvoices}
+            subtitle="All invoices"
             color="orange"
           />
         </div>
+
+        {/* Debug Information */}
+        {/* <div className="mb-8 bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+          <h3 className="text-lg font-semibold text-yellow-800 mb-2 flex items-center gap-2">
+            🐛 Debug Information
+          </h3>
+          <div className="text-sm text-yellow-700 space-y-1">
+            <div>USD Sales: {currencySalesData.currencySales?.USD?.totalSales?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0'}</div>
+            <div>PKR Sales: {currencySalesData.currencySales?.PKR?.totalSales?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0'}</div>
+            <div>AED Sales: {currencySalesData.currencySales?.AED?.totalSales?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0'}</div>
+            <div className="mt-2 text-xs text-yellow-600">
+              Separate currency totals (no conversion) - Check browser console for detailed debug logs
+            </div>
+          </div>
+        </div> */}
+
+        {/* Time-Based Currency Sales Section */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+              💱 Currency Sales Analysis
+              <span className="text-sm font-normal text-gray-500">
+                ({timePeriod === 'all' ? 'All Time' : timePeriod.charAt(0).toUpperCase() + timePeriod.slice(1)})
+              </span>
+            </h2>
+            <div className="text-sm text-gray-500">
+              Total: {currencySalesData.totalSales.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+            </div>
+          </div>
+          
+          {/* Main Currency Sales Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            {/* USD Sales */}
+            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 hover:shadow-xl transition-all duration-300">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-lg bg-green-100 text-green-600">
+                    <div className="text-2xl">🇺🇸</div>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">USD Sales</h3>
+                    <p className="text-sm text-gray-500">US Dollar</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm text-gray-500">Percentage</div>
+                  <div className="text-lg font-bold text-green-600">
+                    {currencySalesData.currencySales.USD.percentage.toFixed(1)}%
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Total Sales:</span>
+                  <span className="font-bold text-green-600 text-lg">
+                    ${currencySalesData.currencySales.USD.totalSales.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Invoices:</span>
+                  <span className="font-medium text-gray-900">{currencySalesData.currencySales.USD.invoiceCount}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Average:</span>
+                  <span className="font-medium text-gray-900">
+                    ${currencySalesData.currencySales.USD.averageSale.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* PKR Sales */}
+            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 hover:shadow-xl transition-all duration-300">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-lg bg-blue-100 text-blue-600">
+                    <div className="text-2xl">🇵🇰</div>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">PKR Sales</h3>
+                    <p className="text-sm text-gray-500">Pakistani Rupee</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm text-gray-500">Percentage</div>
+                  <div className="text-lg font-bold text-blue-600">
+                    {currencySalesData.currencySales.PKR.percentage.toFixed(1)}%
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Total Sales:</span>
+                  <span className="font-bold text-blue-600 text-lg">
+                    ₨{currencySalesData.currencySales.PKR.totalSales.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Invoices:</span>
+                  <span className="font-medium text-gray-900">{currencySalesData.currencySales.PKR.invoiceCount}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Average:</span>
+                  <span className="font-medium text-gray-900">
+                    ₨{currencySalesData.currencySales.PKR.averageSale.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* AED Sales */}
+            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 hover:shadow-xl transition-all duration-300">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-lg bg-purple-100 text-purple-600">
+                    <div className="text-2xl">🇦🇪</div>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">AED Sales</h3>
+                    <p className="text-sm text-gray-500">UAE Dirham</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm text-gray-500">Percentage</div>
+                  <div className="text-lg font-bold text-purple-600">
+                    {currencySalesData.currencySales.AED.percentage.toFixed(1)}%
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Total Sales:</span>
+                  <span className="font-bold text-purple-600 text-lg">
+                    د.إ{currencySalesData.currencySales.AED.totalSales.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Invoices:</span>
+                  <span className="font-medium text-gray-900">{currencySalesData.currencySales.AED.invoiceCount}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Average:</span>
+                  <span className="font-medium text-gray-900">
+                    د.إ{currencySalesData.currencySales.AED.averageSale.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Summary Row */}
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              📊 Sales Summary ({timePeriod === 'all' ? 'All Time' : timePeriod.charAt(0).toUpperCase() + timePeriod.slice(1)})
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-green-600">
+                  ${currencySalesData.summary.usdTotal.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                </div>
+                <div className="text-sm text-gray-600">USD Total</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-blue-600">
+                  ₨{currencySalesData.summary.pkrTotal.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                </div>
+                <div className="text-sm text-gray-600">PKR Total</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-purple-600">
+                  د.إ{currencySalesData.summary.aedTotal.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                </div>
+                <div className="text-sm text-gray-600">AED Total</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-gray-600">
+                  {currencySalesData.totalSales.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                </div>
+                <div className="text-sm text-gray-600">Combined Total</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Legacy Currency Breakdown Cards */}
+        {Object.keys(salesSummary.salesByCurrency).length > 0 && (
+          <div className="mb-8">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              💱 All-Time Sales by Currency
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Object.entries(salesSummary.salesByCurrency).map(([currency, amount]) => (
+                <div key={currency} className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 hover:shadow-xl transition-all duration-300">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600 uppercase tracking-wide">
+                        {currency} Sales
+                      </p>
+                      <p className="text-2xl font-bold text-gray-900 mt-1">
+                        {amount.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                      </p>
+                      <p className="text-sm text-gray-500 mt-1">
+                        {salesSummary.currencyBreakdown[currency]?.percentage?.toFixed(1)}% of total
+                      </p>
+                    </div>
+                    <div className={`p-3 rounded-lg ${
+                      currency === 'USD' ? 'bg-green-100 text-green-600' :
+                      currency === 'PKR' ? 'bg-blue-100 text-blue-600' :
+                      currency === 'AED' ? 'bg-purple-100 text-purple-600' :
+                      'bg-gray-100 text-gray-600'
+                    }`}>
+                      <div className="text-2xl">
+                        {currency === 'USD' ? '🇺🇸' : currency === 'PKR' ? '🇵🇰' : currency === 'AED' ? '🇦🇪' : '💰'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Controls */}
         <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-8">
@@ -324,6 +797,24 @@ function Dashboard() {
         </div>
 
         <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Time Period</label>
+          <select
+            value={timePeriod}
+            onChange={(e) => {
+              setTimePeriod(e.target.value);
+            }}
+            className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="all">📊 All Time</option>
+            <option value="today">📅 Today</option>
+            <option value="week">📆 This Week</option>
+            <option value="month">📅 This Month</option>
+            <option value="quarter">📊 This Quarter</option>
+            <option value="year">📅 This Year</option>
+          </select>
+        </div>
+
+        <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
           <select
             value={sortBy}
@@ -331,7 +822,6 @@ function Dashboard() {
               setSortBy(e.target.value);
               setPage(1);
               cachedApiClient.clearCache(); // Clear cache when changing sort
-              setCache(new Map());
             }}
             className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
@@ -346,15 +836,14 @@ function Dashboard() {
             value={pageSize}
             onChange={(e) => {
               setPageSize(parseInt(e.target.value));
-              setPage(1);
-                    cachedApiClient.clearCache(); // Clear cache when changing page size
-                    setCache(new Map());
+              setPage(1); // Reset to first page when changing page size
                   }}
                   className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value={25}>25 per page</option>
                   <option value={50}>50 per page</option>
                   <option value={100}>100 per page (Recommended)</option>
+                  <option value={200}>200 per page</option>
           </select>
               </div>
             </div>
@@ -392,15 +881,15 @@ function Dashboard() {
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap">
                         <div className="font-medium text-gray-900 text-sm">
-                          {inv.invoice?.invoice_number || inv.invoice?.invoiceNumber || inv.invoice?.id}
+                          {inv.invoiceNumber || inv.id}
                         </div>
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {inv.invoice?.invoice_date?.slice(0, 10) || inv.invoice?.invoiceDate?.slice(0, 10) || "—"}
+                        {inv.invoiceDate?.slice(0, 10) || "—"}
                       </td>
                       <td className="px-3 py-4">
                         <div className="text-sm font-medium text-gray-900 max-w-[200px] truncate">
-                          {inv.invoice?.customer_name || inv.invoice?.customerName || "Unknown"}
+                          {inv.customerName || "Unknown"}
                         </div>
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap hidden sm:table-cell">
@@ -410,15 +899,15 @@ function Dashboard() {
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap">
                         <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                          inv.invoice?.currency === 'USD' ? 'bg-green-100 text-green-800' :
-                          inv.invoice?.currency === 'PKR' ? 'bg-blue-100 text-blue-800' :
+                          inv.currency === 'USD' ? 'bg-green-100 text-green-800' :
+                          inv.currency === 'PKR' ? 'bg-blue-100 text-blue-800' :
                           'bg-purple-100 text-purple-800'
                         }`}>
-                          {inv.invoice?.currency || 'N/A'}
+                          {inv.currency || 'N/A'}
                         </span>
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap text-right text-sm font-bold text-green-600">
-                        {parseFloat(inv.invoice?.total || 0).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                        {parseFloat(inv.total || 0).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
                       </td>
                     </tr>
                   ))}
@@ -453,37 +942,33 @@ function Dashboard() {
         <div className="mt-8 bg-white rounded-xl shadow-lg border border-gray-200 p-6">
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
             <div className="text-sm text-gray-600">
-              Showing <span className="font-medium">{filteredInvoices.length}</span> invoices on page <span className="font-medium">{page}</span>
+              Showing <span className="font-medium">{filteredInvoices.length}</span> invoices on page <span className="font-medium">{page}</span> of <span className="font-medium">{Math.ceil(totalCount / pageSize)}</span> pages
+              <span className="text-gray-500 ml-2">({totalCount} total invoices loaded)</span>
               {hasMorePages && <span> • More pages available</span>}
-              {isFromCache && (
-                <span className="ml-2 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                  📦 Cached
-                </span>
-              )}
               <div className="text-xs text-gray-500 mt-1">
-                Cache size: {cache.size} pages • Page size: {pageSize} invoices
+                Frontend pagination • Page size: {pageSize} invoices
               </div>
             </div>
             
             <div className="flex items-center gap-2">
-            <button
-              disabled={page === 1}
+              <button
+                disabled={page === 1}
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 className={`px-4 py-2 rounded-lg border transition-all ${
-                page === 1
+                  page === 1
                     ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200"
                     : "bg-white text-gray-700 hover:bg-gray-50 border-gray-300 hover:border-blue-300"
-              }`}
-            >
+                }`}
+              >
                 ← Previous
-            </button>
-              
+              </button>
+                
               <div className="px-4 py-2 bg-blue-500 text-white rounded-lg font-medium flex items-center gap-2">
                 Page {page}
                 {loading && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>}
               </div>
-              
-            <button
+                
+              <button
                 disabled={!hasMorePages || loading}
                 onClick={() => setPage(p => p + 1)}
                 className={`px-4 py-2 rounded-lg border transition-all ${
@@ -497,19 +982,20 @@ function Dashboard() {
             </div>
           </div>
           
-          {/* Cache management */}
+          {/* Frontend pagination info */}
           <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-200">
             <div className="text-xs text-gray-500">
-              💡 Previously visited pages load instantly from cache
+              💡 All invoices loaded once, paginated on frontend for fast navigation
             </div>
             <button
               onClick={() => {
+                clearDashboardCache();
                 cachedApiClient.clearCache();
-                setCache(new Map());
+                window.location.reload();
               }}
               className="text-xs px-3 py-1 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
             >
-              🗑️ Clear Cache
+              🔄 Refresh Data
             </button>
           </div>
         </div>

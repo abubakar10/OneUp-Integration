@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
+import apiClient from "../api/apiClient";
 
 function TestConnection() {
   const [data, setData] = useState(null);
@@ -12,7 +12,7 @@ function TestConnection() {
         console.log("Testing API connection...");
         
         // Direct axios call without caching
-        const response = await axios.get("http://localhost:5216/api/invoices?page=1&pageSize=100");
+        const response = await apiClient.get("/invoices?page=1&pageSize=100");
         
         console.log("API Response:", response.data);
         setData(response.data);
