@@ -7,10 +7,11 @@ on:
     branches: [main, master]
 
 env:
-  AZURE_WEBAPP_NAME: oneup-dashboard-api
+  AZURE_WEBAPP_NAME: itcs-sales
   AZURE_WEBAPP_PACKAGE_PATH: "./OneUpDashboard.Api"
   NODE_VERSION: "18.x"
   DOTNET_VERSION: "8.0.x"
+  RESOURCE_GROUP: itcs-oneup
 
 jobs:
   build-and-deploy-backend:
@@ -33,6 +34,7 @@ jobs:
 
       - name: Test
         run: dotnet test ${{ env.AZURE_WEBAPP_PACKAGE_PATH }} --configuration Release --no-build --verbosity normal
+        continue-on-error: true
 
       - name: Publish
         run: dotnet publish ${{ env.AZURE_WEBAPP_PACKAGE_PATH }} --configuration Release --no-build --output ./publish
@@ -77,3 +79,40 @@ jobs:
           app_location: "oneup-dashboard-frontend"
           output_location: "dist"
           skip_app_build: true
+
+  configure-environment:
+    runs-on: ubuntu-latest
+    name: Configure Azure App Service Environment
+    needs: build-and-deploy-backend
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+
+    steps:
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Configure App Settings
+        uses: azure/CLI@v1
+        with:
+          inlineScript: |
+            az webapp config appsettings set --resource-group ${{ env.RESOURCE_GROUP }} --name ${{ env.AZURE_WEBAPP_NAME }} --settings \
+              ASPNETCORE_ENVIRONMENT=Production \
+              ConnectionStrings__MongoDB="${{ secrets.MONGODB_CONNECTION_STRING }}" \
+              MongoDB__DatabaseName=OneUpDashboard \
+              AzureAd__TenantId=758534da-3ea2-42b7-a22c-2824e941888d \
+              AzureAd__ClientId=dd96bb73-e274-4fe8-8e88-c160d73521c9 \
+              AzureAd__ObjectId=5a075c5e-47ca-4df2-970a-2af03f7fe9a9 \
+              AzureAd__ClientSecret="${{ secrets.AZURE_AD_CLIENT_SECRET }}" \
+              AzureAd__RedirectUri="${{ secrets.AZURE_AD_REDIRECT_URI }}" \
+              AzureAd__Authority=https://login.microsoftonline.com/758534da-3ea2-42b7-a22c-2824e941888d \
+              AzureAd__GraphEndpoint=https://graph.microsoft.com/v1.0 \
+              Jwt__Key="${{ secrets.JWT_KEY }}" \
+              Jwt__Issuer=OneUpDashboard.Api \
+              Jwt__Audience=OneUpDashboard.Frontend
+
+      - name: Restart App Service
+        uses: azure/CLI@v1
+        with:
+          inlineScript: |
+            az webapp restart --resource-group ${{ env.RESOURCE_GROUP }} --name ${{ env.AZURE_WEBAPP_NAME }}

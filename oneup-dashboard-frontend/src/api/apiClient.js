@@ -1,7 +1,15 @@
 import axios from "axios";
 
+// Get the API base URL based on environment
+const getApiBaseUrl = () => {
+  if (import.meta.env.PROD) {
+    return "https://itcs-sales-fkf6fza6czg0gdf6.canadacentral-01.azurewebsites.net/api";
+  }
+  return "http://localhost:5216/api";
+};
+
 const apiClient = axios.create({
-  baseURL: "http://localhost:5216/api",
+  baseURL: getApiBaseUrl(),
 });
 
 // Add request interceptor to include auth token
