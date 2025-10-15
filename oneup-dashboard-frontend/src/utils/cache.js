@@ -1,9 +1,13 @@
-// Global cache utility for better performance
+// ✅ Optimized global cache utility for better performance
 class CacheManager {
   constructor() {
     this.cache = new Map();
-    this.maxSize = 50; // Maximum number of cached entries
-    this.ttl = 5 * 60 * 1000; // 5 minutes TTL
+    this.maxSize = 500; // Increased cache size for aggressive caching
+    this.ttl = 30 * 60 * 1000; // 30 minutes TTL for better caching
+    this.sessionCache = new Map(); // Separate session cache for critical data
+    this.sessionTtl = 60 * 60 * 1000; // 60 minutes for session cache
+    this.compressionEnabled = true; // Enable data compression for large datasets
+    this.preloadEnabled = true; // Enable preloading for better UX
   }
 
   // Generate a cache key
@@ -15,41 +19,75 @@ class CacheManager {
     return `${endpoint}?${sortedParams}`;
   }
 
-  // Get cached data
-  get(key) {
-    const cached = this.cache.get(key);
+  // ✅ Optimized get method with session cache support
+  get(key, useSessionCache = false) {
+    const cache = useSessionCache ? this.sessionCache : this.cache;
+    const ttl = useSessionCache ? this.sessionTtl : this.ttl;
+    
+    const cached = cache.get(key);
     if (!cached) return null;
 
     // Check if expired
-    if (Date.now() - cached.timestamp > this.ttl) {
-      this.cache.delete(key);
+    if (Date.now() - cached.timestamp > ttl) {
+      cache.delete(key);
       return null;
     }
 
-    console.log(`📦 Cache HIT: ${key}`);
+    console.log(`📦 Cache HIT: ${key} ${useSessionCache ? '(session)' : ''}`);
     return cached.data;
   }
 
-  // Set cached data
-  set(key, data) {
+  // ✅ Optimized set method with compression for large datasets
+  set(key, data, useSessionCache = false) {
+    const cache = useSessionCache ? this.sessionCache : this.cache;
+    const maxSize = useSessionCache ? 50 : this.maxSize;
+    
     // Remove oldest entries if cache is full
-    if (this.cache.size >= this.maxSize) {
-      const firstKey = this.cache.keys().next().value;
-      this.cache.delete(firstKey);
+    if (cache.size >= maxSize) {
+      const firstKey = cache.keys().next().value;
+      cache.delete(firstKey);
     }
 
-    this.cache.set(key, {
-      data,
-      timestamp: Date.now()
+    // Compress large datasets to save memory
+    let processedData = data;
+    if (this.compressionEnabled && Array.isArray(data) && data.length > 1000) {
+      processedData = this.compressInvoiceData(data);
+      console.log(`🗜️ Compressed ${data.length} invoices for caching`);
+    }
+
+    cache.set(key, {
+      data: processedData,
+      timestamp: Date.now(),
+      compressed: Array.isArray(data) && data.length > 1000
     });
 
-    console.log(`💾 Cache SET: ${key} (Size: ${this.cache.size})`);
+    console.log(`💾 Cache SET: ${key} ${useSessionCache ? '(session)' : ''} (Size: ${cache.size})`);
   }
 
-  // Clear all cache
+  // ✅ Compress invoice data to reduce memory usage
+  compressInvoiceData(invoices) {
+    return invoices.map(invoice => ({
+      id: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      customerName: invoice.customerName,
+      salespersonName: invoice.salespersonName,
+      total: invoice.total,
+      currency: invoice.currency,
+      invoiceDate: invoice.invoiceDate,
+      createdAt: invoice.createdAt,
+      status: invoice.status,
+      paid: invoice.paid,
+      unpaid: invoice.unpaid,
+      sent: invoice.sent,
+      sent_at: invoice.sent_at
+    }));
+  }
+
+  // ✅ Clear all cache including session cache
   clear() {
     this.cache.clear();
-    console.log('🗑️ Cache cleared');
+    this.sessionCache.clear();
+    console.log('🗑️ All cache cleared');
   }
 
   // Clear expired entries

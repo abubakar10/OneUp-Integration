@@ -1,0 +1,27 @@
+# Environment Variables for Azure Deployment
+# Copy these to your Azure App Service Configuration
+
+# MongoDB Configuration
+ConnectionStrings__MongoDB=mongodb+srv://abubakar1156t_db_user:CRlMRi7zsHByGVke@oneupcluster.ovlgzlp.mongodb.net/
+MongoDB__DatabaseName=OneUpDashboard
+
+# Azure AD Configuration
+AzureAd__TenantId=758534da-3ea2-42b7-a22c-2824e941888d
+AzureAd__ClientId=dd96bb73-e274-4fe8-8e88-c160d73521c9
+AzureAd__ObjectId=5a075c5e-47ca-4df2-970a-2af03f7fe9a9
+AzureAd__ClientSecret=3f860372-4bba-418d-973d-0923fea5616d
+AzureAd__RedirectUri=https://oneup-dashboard-frontend.azurestaticapps.net/login
+AzureAd__Authority=https://login.microsoftonline.com/758534da-3ea2-42b7-a22c-2824e941888d
+AzureAd__GraphEndpoint=https://graph.microsoft.com/v1.0
+
+# JWT Configuration
+Jwt__Key=YourSuperSecretKeyThatIsAtLeast32CharactersLong!
+Jwt__Issuer=OneUpDashboard.Api
+Jwt__Audience=OneUpDashboard.Frontend
+
+# CORS Configuration
+Cors__AllowedOrigins__0=https://oneup-dashboard-frontend.azurestaticapps.net
+
+# Application Configuration
+ASPNETCORE_ENVIRONMENT=Production
+WEBSITES_ENABLE_APP_SERVICE_STORAGE=false

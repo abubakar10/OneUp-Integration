@@ -29,10 +29,36 @@ namespace OneUpDashboard.Api.Services
 
         private void CreateIndexes()
         {
-            // Invoice indexes
+            // Invoice indexes for better performance
             _invoices.Indexes.CreateOne(
                 new CreateIndexModel<InvoiceDocument>(
                     Builders<InvoiceDocument>.IndexKeys.Ascending(x => x.InvoiceDate)
+                )
+            );
+
+            // Compound indexes for common queries
+            _invoices.Indexes.CreateOne(
+                new CreateIndexModel<InvoiceDocument>(
+                    Builders<InvoiceDocument>.IndexKeys.Combine(
+                        Builders<InvoiceDocument>.IndexKeys.Ascending(x => x.Currency),
+                        Builders<InvoiceDocument>.IndexKeys.Descending(x => x.InvoiceDate)
+                    )
+                )
+            );
+
+            _invoices.Indexes.CreateOne(
+                new CreateIndexModel<InvoiceDocument>(
+                    Builders<InvoiceDocument>.IndexKeys.Combine(
+                        Builders<InvoiceDocument>.IndexKeys.Ascending(x => x.Currency),
+                        Builders<InvoiceDocument>.IndexKeys.Descending(x => x.CreatedAt)
+                    )
+                )
+            );
+
+            // Index for total field (used in aggregations)
+            _invoices.Indexes.CreateOne(
+                new CreateIndexModel<InvoiceDocument>(
+                    Builders<InvoiceDocument>.IndexKeys.Ascending(x => x.Total)
                 )
             );
             
@@ -69,7 +95,7 @@ namespace OneUpDashboard.Api.Services
             );
         }
 
-        // Invoice operations
+        // ✅ Optimized invoice operations for faster loading
         public async Task<List<InvoiceDocument>> GetInvoicesAsync(int skip = 0, int limit = -1, string sortBy = "invoiceDate")
         {
             var sortDefinition = sortBy.ToLower() switch
@@ -83,7 +109,7 @@ namespace OneUpDashboard.Api.Services
                 .Sort(sortDefinition)
                 .Skip(skip);
 
-            // If limit is -1 or 0, return all invoices (no limit)
+            // If limit is -1, return all invoices (no limit) - optimized for large datasets
             if (limit > 0)
             {
                 query = query.Limit(limit);
@@ -157,9 +183,63 @@ namespace OneUpDashboard.Api.Services
             }
         }
 
+        public async Task UpsertInvoicesAsync(List<InvoiceDocument> invoices)
+        {
+            if (!invoices.Any()) return;
+
+            var bulkOps = new List<WriteModel<InvoiceDocument>>();
+            
+            foreach (var invoice in invoices)
+            {
+                var filter = Builders<InvoiceDocument>.Filter.Eq(x => x.Id, invoice.Id);
+                var update = Builders<InvoiceDocument>.Update
+                    .Set(x => x.InvoiceNumber, invoice.InvoiceNumber)
+                    .Set(x => x.InvoiceDate, invoice.InvoiceDate)
+                    .Set(x => x.CreatedAt, invoice.CreatedAt)
+                    .Set(x => x.CustomerName, invoice.CustomerName)
+                    .Set(x => x.Total, invoice.Total)
+                    .Set(x => x.Currency, invoice.Currency)
+                    .Set(x => x.EmployeeId, invoice.EmployeeId)
+                    .Set(x => x.SalespersonName, invoice.SalespersonName)
+                    .Set(x => x.Description, invoice.Description)
+                    .Set(x => x.Status, invoice.Status)
+                    .Set(x => x.InvoiceStatus, invoice.InvoiceStatus)
+                    .Set(x => x.DeliveryStatus, invoice.DeliveryStatus)
+                    .Set(x => x.Paid, invoice.Paid)
+                    .Set(x => x.Unpaid, invoice.Unpaid)
+                    .Set(x => x.Locked, invoice.Locked)
+                    .Set(x => x.Sent, invoice.Sent)
+                    .Set(x => x.SentAt, invoice.SentAt)
+                    .Set(x => x.SyncedAt, invoice.SyncedAt)
+                    .Set(x => x.UpdatedAt, invoice.UpdatedAt);
+
+                var upsert = new UpdateOneModel<InvoiceDocument>(filter, update) { IsUpsert = true };
+                bulkOps.Add(upsert);
+            }
+
+            if (bulkOps.Any())
+            {
+                await _invoices.BulkWriteAsync(bulkOps);
+            }
+        }
+
         public async Task<bool> InvoiceExistsAsync(int id)
         {
             return await _invoices.CountDocumentsAsync(x => x.Id == id) > 0;
+        }
+
+        /// <summary>
+        /// Delete invoices by their IDs (for invoices that no longer exist in ERP)
+        /// </summary>
+        public async Task DeleteInvoicesByIdsAsync(List<int> invoiceIds)
+        {
+            if (!invoiceIds.Any()) return;
+
+            var filter = Builders<InvoiceDocument>.Filter.In(x => x.Id, invoiceIds);
+            var result = await _invoices.DeleteManyAsync(filter);
+            
+            // Log the deletion result
+            Console.WriteLine($"🗑️ Deleted {result.DeletedCount} invoices from database");
         }
 
         // Employee operations
@@ -305,7 +385,7 @@ namespace OneUpDashboard.Api.Services
                 }),
                 new BsonDocument("$group", new BsonDocument
                 {
-                    { "_id", (string)null },
+                    { "_id", BsonNull.Value },
                     { "totalSales", new BsonDocument("$sum", "$total") }
                 })
             };
@@ -434,7 +514,7 @@ namespace OneUpDashboard.Api.Services
                 matchStage,
                 new BsonDocument("$group", new BsonDocument
                 {
-                    { "_id", (string)null },
+                    { "_id", BsonNull.Value },
                     { "totalSales", new BsonDocument("$sum", "$total") }
                 })
             };
@@ -444,27 +524,28 @@ namespace OneUpDashboard.Api.Services
             return result != null ? (decimal)result["totalSales"].ToDecimal() : 0m;
         }
 
-        // Simple method to get all invoices and calculate totals manually
+        // ✅ Optimized method using MongoDB aggregation instead of loading all invoices
         public async Task<Dictionary<string, decimal>> GetAllInvoicesAndCalculateTotalsAsync()
         {
             try
             {
-                // Get all invoices (this might be slow for large datasets, but good for debugging)
-                var allInvoices = await _invoices.Find(_ => true).ToListAsync();
-                
-                var currencyTotals = new Dictionary<string, decimal>();
-                
-                foreach (var invoice in allInvoices)
+                // Use MongoDB aggregation pipeline for better performance
+                var pipeline = new[]
                 {
-                    var currency = invoice.Currency ?? "Unknown";
-                    if (!currencyTotals.ContainsKey(currency))
+                    new BsonDocument("$group", new BsonDocument
                     {
-                        currencyTotals[currency] = 0;
-                    }
-                    currencyTotals[currency] += invoice.Total;
-                }
+                        { "_id", "$currency" },
+                        { "totalSales", new BsonDocument("$sum", "$total") }
+                    }),
+                    new BsonDocument("$sort", new BsonDocument("totalSales", -1))
+                };
+
+                var result = await _invoices.Aggregate<BsonDocument>(pipeline).ToListAsync();
                 
-                return currencyTotals;
+                return result.ToDictionary(
+                    x => x["_id"].AsString ?? "Unknown",
+                    x => (decimal)x["totalSales"].ToDecimal()
+                );
             }
             catch (Exception ex)
             {
@@ -474,33 +555,52 @@ namespace OneUpDashboard.Api.Services
             }
         }
 
-        // Get detailed invoice statistics
+        // ✅ Optimized detailed invoice statistics using MongoDB aggregation
         public async Task<object> GetDetailedInvoiceStatsAsync()
         {
             try
             {
-                var allInvoices = await _invoices.Find(_ => true).ToListAsync();
+                // Use aggregation pipeline for better performance
+                var pipeline = new[]
+                {
+                    new BsonDocument("$group", new BsonDocument
+                    {
+                        { "_id", "$currency" },
+                        { "count", new BsonDocument("$sum", 1) },
+                        { "totalSales", new BsonDocument("$sum", "$total") },
+                        { "averageSale", new BsonDocument("$avg", "$total") },
+                        { "minSale", new BsonDocument("$min", "$total") },
+                        { "maxSale", new BsonDocument("$max", "$total") }
+                    }),
+                    new BsonDocument("$sort", new BsonDocument("totalSales", -1))
+                };
+
+                var currencyResults = await _invoices.Aggregate<BsonDocument>(pipeline).ToListAsync();
+                
+                // Get total count and date range separately for efficiency
+                var totalCount = await _invoices.CountDocumentsAsync(_ => true);
+                var latestDate = await GetLatestInvoiceDateAsync();
+                var oldestDate = await GetOldestInvoiceDateAsync();
                 
                 var stats = new
                 {
-                    totalInvoices = allInvoices.Count,
-                    totalSales = allInvoices.Sum(x => x.Total),
-                    currencyBreakdown = allInvoices.GroupBy(x => x.Currency ?? "Unknown")
-                        .ToDictionary(
-                            g => g.Key,
-                            g => new
-                            {
-                                count = g.Count(),
-                                totalSales = g.Sum(x => x.Total),
-                                averageSale = g.Average(x => x.Total),
-                                minSale = g.Min(x => x.Total),
-                                maxSale = g.Max(x => x.Total)
-                            }
-                        ),
-                    dateRange = allInvoices.Any() ? new
+                    totalInvoices = (int)totalCount,
+                    totalSales = currencyResults.Sum(x => (decimal)x["totalSales"].ToDecimal()),
+                    currencyBreakdown = currencyResults.ToDictionary(
+                        x => x["_id"].AsString ?? "Unknown",
+                        x => new
+                        {
+                            count = x["count"].AsInt32,
+                            totalSales = (decimal)x["totalSales"].ToDecimal(),
+                            averageSale = (decimal)x["averageSale"].ToDecimal(),
+                            minSale = (decimal)x["minSale"].ToDecimal(),
+                            maxSale = (decimal)x["maxSale"].ToDecimal()
+                        }
+                    ),
+                    dateRange = latestDate.HasValue && oldestDate.HasValue ? new
                     {
-                        earliest = allInvoices.Min(x => x.InvoiceDate),
-                        latest = allInvoices.Max(x => x.InvoiceDate)
+                        earliest = oldestDate.Value,
+                        latest = latestDate.Value
                     } : null
                 };
                 

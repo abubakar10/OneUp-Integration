@@ -2,14 +2,22 @@ import { useState, useEffect } from "react";
 import cachedApiClient from "../api/cachedApiClient";
 import { formatLargeNumber, formatCurrency, smartFormat } from "../utils/formatters";
 
-// Loading Spinner
+// Enhanced Spinner - Progressive loading strategy
 const Spinner = () => (
   <div className="flex flex-col justify-center items-center h-screen w-full bg-gradient-to-br from-green-50 to-teal-100">
     <div className="relative">
       <div className="w-16 h-16 border-4 border-green-200 border-t-green-600 rounded-full animate-spin"></div>
       <div className="w-12 h-12 border-4 border-teal-200 border-t-teal-600 rounded-full animate-spin absolute top-2 left-2 animate-pulse"></div>
     </div>
-    <p className="mt-4 text-gray-600 font-medium">Loading customer data...</p>
+    <p className="mt-4 text-gray-600 font-medium">
+      ⚡ Loading first batch (1000 invoices)...
+    </p>
+    <div className="mt-2 text-sm text-gray-500">
+      Complete customer analytics will load in background
+    </div>
+    <div className="mt-4 text-xs text-green-600 bg-green-50 px-3 py-2 rounded-lg">
+      🚀 Progressive loading for maximum speed
+    </div>
   </div>
 );
 
@@ -37,7 +45,7 @@ const CustomerCard = ({ customer, rank }) => {
         <h3 className="text-lg font-bold text-gray-900 mb-1 truncate" title={customer.name}>
           {customer.name}
         </h3>
-        <p className="text-sm text-gray-600">Customer ID: {customer.id}</p>
+        <p className="text-sm text-gray-600">{customer.orderCount} order{customer.orderCount !== 1 ? 's' : ''}</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
@@ -119,34 +127,45 @@ function Customers() {
     setLoading(true);
     setError(null);
     try {
-      // Fetch ALL invoices for complete customer analytics
-      console.log("🏢 Fetching ALL customer data from invoices...");
+      // ✅ Progressive loading: First batch for immediate display
+      console.log("🏢 Loading first batch (1000 invoices) for immediate customer analytics...");
       
-      const response = await cachedApiClient.get(`/invoices?page=1&pageSize=-1`);
-      const allInvoices = response.data.data || [];
+      const firstBatchResponse = await cachedApiClient.get(`/invoices?page=1&pageSize=1000`);
+      const firstBatch = firstBatchResponse.data.data || [];
       
-      // Process data to create customer analytics
+      // Process first batch data to create initial customer analytics
       const customerData = {};
       
-      allInvoices.forEach(inv => {
-        const customerId = inv.id;
+      firstBatch.forEach(inv => {
         const customerName = inv.customerName || "Unknown Customer";
         const total = inv.total || 0;
         const currency = inv.currency || "USD";
 
-        if (!customerData[customerId]) {
-          customerData[customerId] = {
-            id: customerId,
+        // Use customerName as the unique identifier for grouping
+        if (!customerData[customerName]) {
+          customerData[customerName] = {
+            id: customerName, // Use customerName as ID for now
             name: customerName,
             totalSpent: 0,
             orderCount: 0,
-            currencies: new Set()
+            currencies: new Set(),
+            firstOrderDate: inv.invoiceDate,
+            lastOrderDate: inv.invoiceDate
           };
         }
 
-        customerData[customerId].totalSpent += total;
-        customerData[customerId].orderCount += 1;
-        customerData[customerId].currencies.add(currency);
+        customerData[customerName].totalSpent += total;
+        customerData[customerName].orderCount += 1;
+        customerData[customerName].currencies.add(currency);
+        
+        // Track first and last order dates
+        const orderDate = new Date(inv.invoiceDate);
+        if (orderDate < new Date(customerData[customerName].firstOrderDate)) {
+          customerData[customerName].firstOrderDate = inv.invoiceDate;
+        }
+        if (orderDate > new Date(customerData[customerName].lastOrderDate)) {
+          customerData[customerName].lastOrderDate = inv.invoiceDate;
+        }
       });
 
       // Convert to array and process
@@ -159,8 +178,68 @@ function Customers() {
       // Sort by default criteria
       const sortedCustomers = customersArray.sort((a, b) => b.totalSpent - a.totalSpent);
       
+      console.log(`📊 First batch: ${sortedCustomers.length} customers from ${firstBatch.length} invoices`);
       setCustomers(sortedCustomers);
-      console.log(`✅ Processed ${sortedCustomers.length} customers from ${allInvoices.length} invoices`);
+      setLoading(false);
+      
+      // ✅ Load complete dataset in background for accurate analytics
+      setTimeout(async () => {
+        try {
+          console.log("🏢 Loading complete dataset in background...");
+          const fullResponse = await cachedApiClient.get(`/invoices?page=1&pageSize=-1`);
+          const allInvoices = fullResponse.data.data || [];
+          
+          // Process complete data to create accurate customer analytics
+          const completeCustomerData = {};
+          
+          allInvoices.forEach(inv => {
+            const customerName = inv.customerName || "Unknown Customer";
+            const total = inv.total || 0;
+            const currency = inv.currency || "USD";
+
+            // Use customerName as the unique identifier for grouping
+            if (!completeCustomerData[customerName]) {
+              completeCustomerData[customerName] = {
+                id: customerName, // Use customerName as ID for now
+                name: customerName,
+                totalSpent: 0,
+                orderCount: 0,
+                currencies: new Set(),
+                firstOrderDate: inv.invoiceDate,
+                lastOrderDate: inv.invoiceDate
+              };
+            }
+
+            completeCustomerData[customerName].totalSpent += total;
+            completeCustomerData[customerName].orderCount += 1;
+            completeCustomerData[customerName].currencies.add(currency);
+            
+            // Track first and last order dates
+            const orderDate = new Date(inv.invoiceDate);
+            if (orderDate < new Date(completeCustomerData[customerName].firstOrderDate)) {
+              completeCustomerData[customerName].firstOrderDate = inv.invoiceDate;
+            }
+            if (orderDate > new Date(completeCustomerData[customerName].lastOrderDate)) {
+              completeCustomerData[customerName].lastOrderDate = inv.invoiceDate;
+            }
+          });
+
+          // Convert to array and process
+          const completeCustomersArray = Object.values(completeCustomerData).map(customer => ({
+            ...customer,
+            currencies: Array.from(customer.currencies),
+            averageOrder: customer.totalSpent / customer.orderCount
+          }));
+
+          // Sort by default criteria
+          const completeSortedCustomers = completeCustomersArray.sort((a, b) => b.totalSpent - a.totalSpent);
+          
+          console.log(`✅ Complete dataset: ${completeSortedCustomers.length} customers from ${allInvoices.length} invoices`);
+          setCustomers(completeSortedCustomers);
+        } catch (err) {
+          console.error("❌ Error loading complete customer dataset:", err);
+        }
+      }, 500); // Small delay to let UI render first batch
     } catch (error) {
       console.error("Error fetching customer data:", error);
       setError("Failed to fetch customer data. Please try refreshing the page.");
@@ -361,7 +440,9 @@ function Customers() {
                         <div className="font-semibold text-gray-900 max-w-xs truncate" title={customer.name}>
                           {customer.name}
                         </div>
-                        <div className="text-sm text-gray-500">ID: {customer.id}</div>
+                        <div className="text-sm text-gray-500">
+                          {customer.orderCount} order{customer.orderCount !== 1 ? 's' : ''}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right">
                         <span className="text-lg font-bold text-green-600">

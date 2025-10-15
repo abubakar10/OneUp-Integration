@@ -1,0 +1,86 @@
+# MongoDB Atlas Setup Script
+
+# This script helps you configure MongoDB Atlas for your OneUp Dashboard
+
+echo "🗄️ MongoDB Atlas Setup for OneUp Dashboard"
+echo "=========================================="
+echo ""
+
+echo "📋 Prerequisites:"
+echo "1. MongoDB Atlas account (https://www.mongodb.com/atlas)"
+echo "2. Azure subscription"
+echo "3. Your OneUp Dashboard code"
+echo ""
+
+echo "🚀 Step-by-Step Setup:"
+echo ""
+
+echo "1️⃣ Create MongoDB Atlas Cluster:"
+echo " • Go to https://cloud.mongodb.com/"
+echo " • Click 'Build a Database'"
+echo " • Choose 'M0 Sandbox' (Free tier)"
+echo " • Select AWS provider"
+echo " • Choose US East (N. Virginia) region"
+echo " • Click 'Create Cluster'"
+echo ""
+
+echo "2️⃣ Configure Database Access:"
+echo " • Go to 'Database Access' → 'Add New Database User'"
+echo " • Authentication Method: Password"
+echo " • Username: oneup_dashboard_user"
+echo " • Password: [Generate strong password]"
+echo " • Database User Privileges: 'Read and write to any database'"
+echo " • Click 'Add User'"
+echo ""
+
+echo "3️⃣ Configure Network Access:"
+echo " • Go to 'Network Access' → 'Add IP Address'"
+echo " • Click 'Allow Access from Anywhere' (0.0.0.0/0)"
+echo " • Click 'Confirm'"
+echo ""
+
+echo "4️⃣ Get Connection String:"
+echo " • Go to 'Clusters' → Click 'Connect'"
+echo " • Choose 'Connect your application'"
+echo " • Copy the connection string"
+echo " • Replace <password> with your actual password"
+echo ""
+
+echo "5️⃣ Update Azure App Service Configuration:"
+echo " • Go to Azure Portal → App Services → oneup-dashboard-api"
+echo " • Go to Configuration → Application settings"
+echo " • Add: ConnectionStrings**MongoDB = [your-connection-string]"
+echo " • Add: MongoDB**DatabaseName = OneUpDashboard"
+echo " • Click 'Save'"
+echo ""
+
+echo "✅ MongoDB Atlas Setup Complete!"
+echo ""
+echo "🔗 Useful Links:"
+echo "• MongoDB Atlas Dashboard: https://cloud.mongodb.com/"
+echo "• Azure Portal: https://portal.azure.com/"
+echo "• OneUp Dashboard Deployment Guide: ./AZURE_DEPLOYMENT_GUIDE.md"
+echo ""
+
+echo "📊 Database Collections Created Automatically:"
+echo "• invoices - Stores invoice data"
+echo "• employees - Stores employee/salesperson data"
+echo "• synclogs - Stores sync operation logs"
+echo ""
+
+echo "🔍 Monitoring Your Database:"
+echo "• Go to MongoDB Atlas → Monitoring"
+echo "• Set up alerts for performance and usage"
+echo "• Monitor connection count and query performance"
+echo ""
+
+echo "🛠️ Troubleshooting:"
+echo "• Connection issues: Check network access settings"
+echo "• Authentication errors: Verify username/password"
+echo "• Performance issues: Check query patterns in Monitoring"
+echo ""
+
+echo "📞 Support:"
+echo "• MongoDB Atlas Documentation: https://docs.atlas.mongodb.com/"
+echo "• MongoDB Community: https://community.mongodb.com/"
+echo "• Azure Support: https://azure.microsoft.com/en-us/support/"

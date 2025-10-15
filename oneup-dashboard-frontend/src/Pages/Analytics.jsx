@@ -59,10 +59,22 @@ const MetricCard = ({ icon, title, value, change, trend }) => (
   </div>
 );
 
-// Loading Spinner
+// Enhanced Spinner - Progressive loading strategy
 const Spinner = () => (
-  <div className="flex justify-center items-center h-64">
-    <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+  <div className="flex flex-col justify-center items-center h-screen w-full bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="relative">
+      <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+      <div className="w-12 h-12 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin absolute top-2 left-2 animate-pulse"></div>
+    </div>
+    <p className="mt-4 text-gray-600 font-medium">
+      ⚡ Loading first batch (1000 invoices)...
+    </p>
+    <div className="mt-2 text-sm text-gray-500">
+      Complete analytics will load in background
+    </div>
+    <div className="mt-4 text-xs text-blue-600 bg-blue-50 px-3 py-2 rounded-lg">
+      🚀 Progressive loading for maximum speed
+    </div>
   </div>
 );
 
@@ -89,18 +101,20 @@ function Analytics() {
   const fetchAnalyticsData = async () => {
     setLoading(true);
     try {
-      // Fetch ALL invoices for complete analytics
-      const response = await cachedApiClient.get(`/invoices?page=1&pageSize=-1`);
-      const allInvoices = response.data.data || [];
+      // ✅ Progressive loading: First batch for immediate display
+      console.log("📊 Loading first batch (1000 invoices) for immediate analytics...");
       
-      // Process data for analytics
+      const firstBatchResponse = await cachedApiClient.get(`/invoices?page=1&pageSize=1000`);
+      const firstBatch = firstBatchResponse.data.data || [];
+      
+      // Process first batch data for initial analytics
       const salesByPerson = {};
       const salesByCurrency = {};
       const customerSales = {};
       const monthlySales = {};
       const currencyRevenue = {};
 
-      allInvoices.forEach(inv => {
+      firstBatch.forEach(inv => {
         const salesperson = inv.salespersonName || "Unknown";
         const currency = inv.currency || "USD";
         const customer = inv.customerName || "Unknown";
@@ -146,6 +160,8 @@ function Analytics() {
         .slice(0, 12)
         .map(([label, value]) => ({ label, value }));
 
+      console.log(`📊 First batch: ${firstBatch.length} invoices processed for analytics`);
+      
       setData({
         salesByPerson: salesByPersonData,
         salesByCurrency: salesByCurrencyData,
@@ -153,11 +169,92 @@ function Analytics() {
         topCustomers: topCustomersData,
         metrics: {
           currencyRevenue,
-          totalInvoices: allInvoices.length,
-          averageInvoiceValue: currencyRevenue["USD"] / allInvoices.filter(inv => inv.currency === "USD").length || 0,
+          totalInvoices: firstBatch.length,
+          averageInvoiceValue: currencyRevenue["USD"] / firstBatch.filter(inv => inv.currency === "USD").length || 0,
           topSalesperson: salesByPersonData[0]?.label || "Unknown"
         }
       });
+      
+      setLoading(false);
+      
+      // ✅ Load complete dataset in background for accurate analytics
+      setTimeout(async () => {
+        try {
+          console.log("📊 Loading complete dataset in background...");
+          const fullResponse = await cachedApiClient.get(`/invoices?page=1&pageSize=-1`);
+          const allInvoices = fullResponse.data.data || [];
+          
+          // Process complete data for accurate analytics
+          const completeSalesByPerson = {};
+          const completeSalesByCurrency = {};
+          const completeCustomerSales = {};
+          const completeMonthlySales = {};
+          const completeCurrencyRevenue = {};
+
+          allInvoices.forEach(inv => {
+            const salesperson = inv.salespersonName || "Unknown";
+            const currency = inv.currency || "USD";
+            const customer = inv.customerName || "Unknown";
+            const total = parseFloat(inv.total || 0);
+            const date = inv.invoiceDate || "";
+            const month = date.slice(0, 7); // YYYY-MM format
+
+            // Sales by person
+            completeSalesByPerson[salesperson] = (completeSalesByPerson[salesperson] || 0) + total;
+            
+            // Sales by currency
+            completeSalesByCurrency[currency] = (completeSalesByCurrency[currency] || 0) + total;
+            
+            // Currency revenue (separate totals)
+            completeCurrencyRevenue[currency] = (completeCurrencyRevenue[currency] || 0) + total;
+            
+            // Top customers
+            completeCustomerSales[customer] = (completeCustomerSales[customer] || 0) + total;
+            
+            // Monthly sales
+            if (month) {
+              completeMonthlySales[month] = (completeMonthlySales[month] || 0) + total;
+            }
+          });
+
+          // Convert to chart data format
+          const completeSalesByPersonData = Object.entries(completeSalesByPerson)
+            .sort(([,a], [,b]) => b - a)
+            .slice(0, 10)
+            .map(([label, value]) => ({ label, value }));
+
+          const completeSalesByCurrencyData = Object.entries(completeSalesByCurrency)
+            .sort(([,a], [,b]) => b - a)
+            .map(([label, value]) => ({ label, value }));
+
+          const completeTopCustomersData = Object.entries(completeCustomerSales)
+            .sort(([,a], [,b]) => b - a)
+            .slice(0, 8)
+            .map(([label, value]) => ({ label: label.slice(0, 20) + (label.length > 20 ? '...' : ''), value }));
+
+          const completeSalesByMonthData = Object.entries(completeMonthlySales)
+            .sort(([a], [b]) => b.localeCompare(a))
+            .slice(0, 12)
+            .map(([label, value]) => ({ label, value }));
+
+          console.log(`✅ Complete dataset: ${allInvoices.length} invoices processed for analytics`);
+          
+          setData({
+            salesByPerson: completeSalesByPersonData,
+            salesByCurrency: completeSalesByCurrencyData,
+            salesByMonth: completeSalesByMonthData,
+            topCustomers: completeTopCustomersData,
+            metrics: {
+              currencyRevenue: completeCurrencyRevenue,
+              totalInvoices: allInvoices.length,
+              averageInvoiceValue: completeCurrencyRevenue["USD"] / allInvoices.filter(inv => inv.currency === "USD").length || 0,
+              topSalesperson: completeSalesByPersonData[0]?.label || "Unknown"
+            }
+          });
+        } catch (err) {
+          console.error("❌ Error loading complete analytics dataset:", err);
+        }
+      }, 500); // Small delay to let UI render first batch
     } catch (error) {
       console.error("Error fetching analytics data:", error);
       // Fallback: create mock data if API fails
@@ -199,7 +296,7 @@ function Analytics() {
               </h1>
               <p className="text-gray-600 mt-1">Insights and performance metrics</p>
             </div>
-            <div className="mt-4 md:mt-0">
+            <div className="mt-4 md:mt-0 flex gap-2">
               <select
                 value={timeRange}
                 onChange={(e) => setTimeRange(e.target.value)}

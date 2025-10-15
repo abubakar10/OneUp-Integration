@@ -1,5 +1,11 @@
 import { LogLevel } from '@azure/msal-browser';
 
+// Get environment-specific URLs
+const isProduction = import.meta.env.PROD;
+const redirectUri = isProduction 
+    ? 'https://oneup-dashboard-frontend.azurestaticapps.net/login'
+    : 'http://localhost:5173/login';
+
 /**
  * Configuration object to be passed to MSAL instance on creation.
  * For a full list of MSAL.js configuration parameters, visit:
@@ -9,8 +15,8 @@ export const msalConfig = {
     auth: {
         clientId: 'dd96bb73-e274-4fe8-8e88-c160d73521c9',
         authority: 'https://login.microsoftonline.com/758534da-3ea2-42b7-a22c-2824e941888d',
-        redirectUri: 'http://localhost:5173/login',
-        postLogoutRedirectUri: 'http://localhost:5173/login',
+        redirectUri: redirectUri,
+        postLogoutRedirectUri: redirectUri,
         navigateToLoginRequestUrl: true,
     },
     cache: {

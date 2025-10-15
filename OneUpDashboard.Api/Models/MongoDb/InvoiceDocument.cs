@@ -39,6 +39,27 @@ namespace OneUpDashboard.Api.Models.MongoDb
         [BsonElement("status")]
         public string? Status { get; set; }
         
+        [BsonElement("invoiceStatus")]
+        public int? InvoiceStatus { get; set; }
+        
+        [BsonElement("deliveryStatus")]
+        public int? DeliveryStatus { get; set; }
+        
+        [BsonElement("paid")]
+        public decimal Paid { get; set; }
+        
+        [BsonElement("unpaid")]
+        public decimal Unpaid { get; set; }
+        
+        [BsonElement("locked")]
+        public bool Locked { get; set; }
+        
+        [BsonElement("sent")]
+        public bool Sent { get; set; }
+        
+        [BsonElement("sentAt")]
+        public DateTime? SentAt { get; set; }
+        
         [BsonElement("syncedAt")]
         public DateTime SyncedAt { get; set; } = DateTime.UtcNow;
         

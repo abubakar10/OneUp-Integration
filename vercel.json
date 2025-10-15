@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "OneUpDashboard.Api/OneUpDashboard.Api.csproj",
+      "use": "@vercel/azure-functions",
+      "config": {
+        "runtime": "dotnet8"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/$1"
+    }
+  ]
+}

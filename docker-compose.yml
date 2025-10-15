@@ -1,0 +1,85 @@
+# Docker Compose for OneUp Dashboard
+# Complete local development environment
+
+version: "3.8"
+
+services:
+  # MongoDB (for local development)
+  mongodb:
+    image: mongo:7.0
+    container_name: oneup-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password123
+      MONGO_INITDB_DATABASE: OneUpDashboard
+    volumes:
+      - mongodb_data:/data/db
+      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    networks:
+      - oneup-network
+
+  # Backend API
+  backend:
+    build:
+      context: .
+      dockerfile: OneUpDashboard.Api/Dockerfile
+    container_name: oneup-backend
+    restart: unless-stopped
+    ports:
+      - "5000:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__MongoDB=mongodb://admin:password123@mongodb:27017/OneUpDashboard?authSource=admin
+      - MongoDB__DatabaseName=OneUpDashboard
+      - AzureAd__TenantId=758534da-3ea2-42b7-a22c-2824e941888d
+      - AzureAd__ClientId=dd96bb73-e274-4fe8-8e88-c160d73521c9
+      - AzureAd__ObjectId=5a075c5e-47ca-4df2-970a-2af03f7fe9a9
+      - AzureAd__ClientSecret=3f860372-4bba-418d-973d-0923fea5616d
+      - AzureAd__RedirectUri=http://localhost:3000/login
+      - AzureAd__Authority=https://login.microsoftonline.com/758534da-3ea2-42b7-a22c-2824e941888d
+      - AzureAd__GraphEndpoint=https://graph.microsoft.com/v1.0
+      - Jwt__Key=YourSuperSecretKeyThatIsAtLeast32CharactersLong!
+      - Jwt__Issuer=OneUpDashboard.Api
+      - Jwt__Audience=OneUpDashboard.Frontend
+      - Cors__AllowedOrigins__0=http://localhost:3000
+    depends_on:
+      - mongodb
+    networks:
+      - oneup-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend
+  frontend:
+    build:
+      context: .
+      dockerfile: oneup-dashboard-frontend/Dockerfile
+    container_name: oneup-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      - backend
+    networks:
+      - oneup-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  mongodb_data:
+    driver: local
+
+networks:
+  oneup-network:
+    driver: bridge

@@ -1,0 +1,35 @@
+# Azure Static Web Apps Configuration
+# This file configures routing and authentication for the frontend
+
+{
+  "routes": [
+    {
+      "route": "/api/*",
+      "allowedRoles": ["anonymous"]
+    },
+    {
+      "route": "/hangfire/*",
+      "allowedRoles": ["authenticated"]
+    },
+    {
+      "route": "/*",
+      "serve": "/index.html",
+      "statusCode": 200
+    }
+  ],
+  "navigationFallback": {
+    "rewrite": "/index.html",
+    "exclude": ["/images/*.{png,jpg,jpeg,gif,svg}", "/css/*", "/js/*", "/api/*"]
+  },
+  "mimeTypes": {
+    ".json": "application/json",
+    ".woff": "application/font-woff",
+    ".woff2": "application/font-woff2"
+  },
+  "globalHeaders": {
+    "Cache-Control": "no-cache"
+  },
+  "platform": {
+    "apiRuntime": "node:18"
+  }
+}

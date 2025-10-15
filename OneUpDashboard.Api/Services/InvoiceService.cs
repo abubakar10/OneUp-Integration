@@ -59,7 +59,15 @@ namespace OneUpDashboard.Api.Services
                         currency_iso_code = i.Currency,
                         employee_id = i.EmployeeId,
                         description = i.Description,
-                        status = i.Status
+                        status = i.Status,
+                        invoice_status = i.InvoiceStatus,
+                        delivery_status = i.DeliveryStatus,
+                        paid = i.Paid.ToString("F2"),
+                        unpaid = i.Unpaid.ToString("F2"),
+                        locked = i.Locked,
+                        sent = i.Sent,
+                        sent_at = i.SentAt?.ToString("yyyy-MM-dd"),
+                        payment_status = GetPaymentStatus(i.Paid, i.Unpaid)
                     },
                     salespersonName = i.SalespersonName ?? "Unknown"
                 }).ToList();
@@ -197,6 +205,25 @@ namespace OneUpDashboard.Api.Services
             {
                 _logger.LogError(ex, "❌ MongoDB search failed: {Message}", ex.Message);
                 return new { error = "MongoDB search failed", searchTerm };
+            }
+        }
+
+        /// <summary>
+        /// Determine payment status based on paid and unpaid amounts
+        /// </summary>
+        private static string GetPaymentStatus(decimal paid, decimal unpaid)
+        {
+            if (unpaid <= 0)
+            {
+                return "Paid";
+            }
+            else if (paid > 0)
+            {
+                return "Partially Paid";
+            }
+            else
+            {
+                return "Due";
             }
         }
     }

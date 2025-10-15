@@ -246,17 +246,26 @@ namespace OneUpDashboard.Api.Controllers
                         {
                             try
                             {
-                                var currencyData = stats.currencyBreakdown[currency];
-                                if (currencyData != null)
+                                // Use safe dictionary access with ContainsKey check
+                                if (stats.currencyBreakdown.ContainsKey(currency))
                                 {
-                                    currencySales[currency] = new
+                                    var currencyData = stats.currencyBreakdown[currency];
+                                    if (currencyData != null)
                                     {
-                                        totalSales = (decimal)currencyData.totalSales,
-                                        invoiceCount = (int)currencyData.count,
-                                        averageSale = (decimal)currencyData.averageSale,
-                                        percentage = manualTotals.Values.Sum() > 0 ? 
-                                            ((decimal)currencyData.totalSales / manualTotals.Values.Sum()) * 100 : 0
-                                    };
+                                        currencySales[currency] = new
+                                        {
+                                            totalSales = (decimal)currencyData.totalSales,
+                                            invoiceCount = (int)currencyData.count,
+                                            averageSale = (decimal)currencyData.averageSale,
+                                            percentage = manualTotals.Values.Sum() > 0 ? 
+                                                ((decimal)currencyData.totalSales / manualTotals.Values.Sum()) * 100 : 0
+                                        };
+                                    }
+                                }
+                                else
+                                {
+                                    // Currency doesn't exist in database, keep default values
+                                    _logger.LogDebug($"Currency {currency} not found in database, using default values");
                                 }
                             }
                             catch (Exception ex)

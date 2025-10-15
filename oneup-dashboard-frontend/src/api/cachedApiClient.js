@@ -9,9 +9,9 @@ class CachedApiClient {
     this.isProcessing = false;
   }
 
-  // Get with caching
+  // ✅ Optimized get with enhanced caching
   async get(url, config = {}) {
-    const { useCache = true, ...restConfig } = config;
+    const { useCache = true, useSessionCache = false, ...restConfig } = config;
     
     if (!useCache) {
       return this.baseClient.get(url, restConfig);
@@ -30,7 +30,7 @@ class CachedApiClient {
     const cacheKey = globalCache.generateKey(endpoint, params);
     
     // Try to get from cache first
-    const cached = globalCache.get(cacheKey);
+    const cached = globalCache.get(cacheKey, useSessionCache);
     if (cached) {
       return { data: cached };
     }
@@ -38,7 +38,7 @@ class CachedApiClient {
     // Fetch from API and cache
     try {
       const response = await this.baseClient.get(url, restConfig);
-      globalCache.set(cacheKey, response.data);
+      globalCache.set(cacheKey, response.data, useSessionCache);
       return response;
     } catch (error) {
       throw error;

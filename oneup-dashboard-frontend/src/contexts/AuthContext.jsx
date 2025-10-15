@@ -69,7 +69,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     // Delay to let MSAL initialize completely
-    const timeoutId = setTimeout(checkMsalAccounts, 500);
+    const timeoutId = setTimeout(checkMsalAccounts, 1000);
     return () => clearTimeout(timeoutId);
   }, [instance]);
 
@@ -79,8 +79,10 @@ export const AuthProvider = ({ children }) => {
     setToken(backendToken);
     setUser(userData);
     setLoading(false);
-    // Navigate to dashboard after successful login
-    navigate('/dashboard');
+    
+    // Reload the page to ensure all components re-initialize with fresh auth state
+    // This is especially important after MSAL redirect flow
+    window.location.reload();
   };
 
   const loginWithMSAL = async () => {

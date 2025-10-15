@@ -76,6 +76,7 @@ namespace OneUpDashboard.Api.Services
 
         /// <summary>
         /// Smart pagination loop - fetches ALL invoices respecting OneUp API's 100-record limit
+        /// Also deletes invoices that no longer exist in ERP
         /// </summary>
         private async Task<SyncResult> SyncInvoicesWithPaginationAsync(SyncLogDocument syncLog)
         {
@@ -86,13 +87,16 @@ namespace OneUpDashboard.Api.Services
             int page = 1;
             bool hasMoreData = true;
 
-            // Get existing invoice IDs to avoid duplicates
+            // Get existing invoices for comparison and updates
+            var existingInvoices = await _mongoDbService.GetInvoicesAsync(0, int.MaxValue);
             var existingInvoiceIds = new HashSet<int>();
-            var allInvoices = await _mongoDbService.GetInvoicesAsync(0, int.MaxValue);
-            foreach (var invoice in allInvoices)
+            foreach (var invoice in existingInvoices)
             {
                 existingInvoiceIds.Add(invoice.Id);
             }
+
+            // Track which invoices are found in ERP during this sync
+            var foundInvoiceIds = new HashSet<int>();
 
             while (hasMoreData)
             {
@@ -130,11 +134,14 @@ namespace OneUpDashboard.Api.Services
                     // Process each invoice in this page
                     foreach (var invoiceElement in pageInvoices)
                     {
-                        var invoice = await ProcessInvoiceElementAsync(invoiceElement, existingInvoiceIds);
+                        var invoice = await ProcessInvoiceElementAsync(invoiceElement, existingInvoices);
                         if (invoice != null)
                         {
                             batchInvoices.Add(invoice);
                             result.ProcessedInvoices++;
+                            
+                            // Track this invoice as found in ERP
+                            foundInvoiceIds.Add(invoice.Id);
                         }
                     }
 
@@ -180,13 +187,16 @@ namespace OneUpDashboard.Api.Services
                 _logger.LogInformation("💾 Saved final batch of {Count} invoices", batchInvoices.Count);
             }
 
+            // Delete invoices that no longer exist in ERP
+            await DeleteMissingInvoicesAsync(existingInvoiceIds, foundInvoiceIds, syncLog);
+
             return result;
         }
 
         /// <summary>
         /// Process a single invoice element from the API response
         /// </summary>
-        private async Task<InvoiceDocument?> ProcessInvoiceElementAsync(JsonElement invoiceElement, HashSet<int> existingIds)
+        private async Task<InvoiceDocument?> ProcessInvoiceElementAsync(JsonElement invoiceElement, List<InvoiceDocument> existingInvoices)
         {
             try
             {
@@ -196,11 +206,9 @@ namespace OneUpDashboard.Api.Services
                     return null;
                 }
 
-                // Skip if already exists
-                if (existingIds.Contains(invoiceId))
-                {
-                    return null;
-                }
+                // Check if invoice already exists and get it for comparison
+                var existingInvoice = existingInvoices.FirstOrDefault(x => x.Id == invoiceId);
+                var isUpdate = existingInvoice != null;
 
                 var invoice = new InvoiceDocument
                 {
@@ -209,10 +217,21 @@ namespace OneUpDashboard.Api.Services
                     CustomerName = GetCustomerName(invoiceElement),
                     Currency = GetStringProperty(invoiceElement, "currency_iso_code") ?? GetStringProperty(invoiceElement, "currency") ?? "USD",
                     Description = GetStringProperty(invoiceElement, "public_note") ?? GetStringProperty(invoiceElement, "description"),
-                    Status = GetStringProperty(invoiceElement, "status") ?? "Active",
+                    Status = GetInvoiceStatusString(invoiceElement),
+                    InvoiceStatus = GetIntProperty(invoiceElement, "invoice_status"),
+                    DeliveryStatus = GetIntProperty(invoiceElement, "delivery_status"),
+                    Locked = GetBoolProperty(invoiceElement, "locked"),
+                    Sent = GetBoolProperty(invoiceElement, "sent"),
+                    SentAt = ParseDateProperty(invoiceElement, "sent_at"),
                     SyncedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
+
+                // If this is an update, preserve the original CreatedAt date
+                if (isUpdate && existingInvoice != null)
+                {
+                    invoice.CreatedAt = existingInvoice.CreatedAt;
+                }
 
                 // Parse total amount
                 if (invoiceElement.TryGetProperty("total", out var totalElement))
@@ -225,6 +244,34 @@ namespace OneUpDashboard.Api.Services
                     else if (totalElement.ValueKind == JsonValueKind.Number)
                     {
                         invoice.Total = totalElement.GetDecimal();
+                    }
+                }
+
+                // Parse paid amount
+                if (invoiceElement.TryGetProperty("paid", out var paidElement))
+                {
+                    if (paidElement.ValueKind == JsonValueKind.String &&
+                        decimal.TryParse(paidElement.GetString(), out var paidDecimal))
+                    {
+                        invoice.Paid = paidDecimal;
+                    }
+                    else if (paidElement.ValueKind == JsonValueKind.Number)
+                    {
+                        invoice.Paid = paidElement.GetDecimal();
+                    }
+                }
+
+                // Parse unpaid amount
+                if (invoiceElement.TryGetProperty("unpaid", out var unpaidElement))
+                {
+                    if (unpaidElement.ValueKind == JsonValueKind.String &&
+                        decimal.TryParse(unpaidElement.GetString(), out var unpaidDecimal))
+                    {
+                        invoice.Unpaid = unpaidDecimal;
+                    }
+                    else if (unpaidElement.ValueKind == JsonValueKind.Number)
+                    {
+                        invoice.Unpaid = unpaidElement.GetDecimal();
                     }
                 }
 
@@ -277,7 +324,7 @@ namespace OneUpDashboard.Api.Services
         }
 
         /// <summary>
-        /// Save a batch of invoices to the database efficiently
+        /// Save a batch of invoices to the database efficiently (upsert - insert or update)
         /// </summary>
         private async Task SaveInvoiceBatchAsync(List<InvoiceDocument> invoices)
         {
@@ -285,12 +332,57 @@ namespace OneUpDashboard.Api.Services
 
             try
             {
-                await _mongoDbService.InsertInvoicesAsync(invoices);
+                await _mongoDbService.UpsertInvoicesAsync(invoices);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "❌ Failed to save invoice batch of {Count} records", invoices.Count);
                 throw;
+            }
+        }
+
+        /// <summary>
+        /// Delete invoices that exist in database but were not found in ERP (deleted from ERP)
+        /// </summary>
+        private async Task DeleteMissingInvoicesAsync(HashSet<int> existingInvoiceIds, HashSet<int> foundInvoiceIds, SyncLogDocument syncLog)
+        {
+            try
+            {
+                // Find invoices that exist in DB but were not found in ERP
+                var invoicesToDelete = existingInvoiceIds.Except(foundInvoiceIds).ToList();
+                
+                if (invoicesToDelete.Count > 0)
+                {
+                    _logger.LogInformation("🗑️ Found {Count} invoices to delete (not found in ERP)", invoicesToDelete.Count);
+                    
+                    // Delete invoices in batches to avoid overwhelming the database
+                    const int deleteBatchSize = 100;
+                    var deletedCount = 0;
+                    
+                    for (int i = 0; i < invoicesToDelete.Count; i += deleteBatchSize)
+                    {
+                        var batch = invoicesToDelete.Skip(i).Take(deleteBatchSize).ToList();
+                        await _mongoDbService.DeleteInvoicesByIdsAsync(batch);
+                        deletedCount += batch.Count;
+                        
+                        _logger.LogInformation("🗑️ Deleted batch of {Count} invoices. Total deleted: {Total}", batch.Count, deletedCount);
+                        
+                        // Update sync log with deletion progress
+                        syncLog.Notes = $"Synced {foundInvoiceIds.Count} invoices, deleted {deletedCount} missing invoices";
+                        await _mongoDbService.UpdateSyncLogAsync(syncLog);
+                    }
+                    
+                    _logger.LogInformation("✅ Successfully deleted {Count} invoices that no longer exist in ERP", deletedCount);
+                }
+                else
+                {
+                    _logger.LogInformation("✅ No invoices to delete - all existing invoices found in ERP");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "❌ Failed to delete missing invoices: {Message}", ex.Message);
+                // Don't throw - we don't want deletion failures to break the entire sync
             }
         }
 
@@ -445,6 +537,68 @@ namespace OneUpDashboard.Api.Services
             return element.TryGetProperty(propertyName, out var prop) && prop.ValueKind == JsonValueKind.String
                 ? prop.GetString()
                 : null;
+        }
+
+        private static int? GetIntProperty(JsonElement element, string propertyName)
+        {
+            if (element.TryGetProperty(propertyName, out var prop))
+            {
+                if (prop.ValueKind == JsonValueKind.Number)
+                {
+                    return prop.GetInt32();
+                }
+                else if (prop.ValueKind == JsonValueKind.String && int.TryParse(prop.GetString(), out var intValue))
+                {
+                    return intValue;
+                }
+            }
+            return null;
+        }
+
+        private static bool GetBoolProperty(JsonElement element, string propertyName)
+        {
+            if (element.TryGetProperty(propertyName, out var prop))
+            {
+                if (prop.ValueKind == JsonValueKind.True)
+                {
+                    return true;
+                }
+                else if (prop.ValueKind == JsonValueKind.False)
+                {
+                    return false;
+                }
+                else if (prop.ValueKind == JsonValueKind.String && bool.TryParse(prop.GetString(), out var boolValue))
+                {
+                    return boolValue;
+                }
+            }
+            return false;
+        }
+
+        private static string GetInvoiceStatusString(JsonElement element)
+        {
+            // Get invoice_status first
+            var invoiceStatus = GetIntProperty(element, "invoice_status");
+            
+            if (invoiceStatus.HasValue)
+            {
+                return invoiceStatus.Value switch
+                {
+                    2 => "Invoiced",
+                    3 => "Cancelled",
+                    _ => "Unknown"
+                };
+            }
+
+            // Fallback to old status field if available
+            var status = GetStringProperty(element, "status");
+            if (!string.IsNullOrWhiteSpace(status))
+            {
+                return status;
+            }
+
+            // Default fallback
+            return "Active";
         }
 
         private static DateTime? ParseDateProperty(JsonElement element, string propertyName)

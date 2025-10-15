@@ -19,7 +19,7 @@ const Login = () => {
 
   // Wait for MSAL to initialize and check authentication status
   useEffect(() => {
-    // Wait for MSAL to finish initialization
+    // Wait for MSAL to finish initialization and redirect handling
     if (inProgress === "startup" || inProgress === "handleRedirect") {
       return;
     }
@@ -34,13 +34,15 @@ const Login = () => {
     // let AuthContext handle the token exchange and sync
     if (isMsalAuthenticated) {
       // Give AuthContext time to handle the authentication
+      // After token exchange, the page will reload automatically
       setTimeout(() => {
         if (isAuthenticated()) {
           navigate(from, { replace: true });
         } else {
+          // If still not authenticated after timeout, show login form
           setProcessingAuth(false);
         }
-      }, 1000);
+      }, 1500); // Reduced timeout since page reload will handle navigation
       return;
     }
 
