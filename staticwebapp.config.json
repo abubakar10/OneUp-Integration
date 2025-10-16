@@ -1,6 +1,3 @@
-# Azure Static Web Apps Configuration
-# This file configures routing and authentication for the frontend
-
 {
   "routes": [
     {
@@ -30,6 +27,6 @@
     "Cache-Control": "no-cache"
   },
   "platform": {
-    "apiRuntime": "node:18"
+    "apiRuntime": "node:20"
   }
 }
