@@ -91,6 +91,7 @@ app.MapControllers();
 // ✅ Add a simple health check endpoint
 app.MapGet("/", () => "OneUp Dashboard API is running!");
 app.MapGet("/health", () => new { Status = "Healthy", Timestamp = DateTime.UtcNow });
+app.MapGet("/api/test", () => new { Message = "API Test endpoint working!", Timestamp = DateTime.UtcNow });
 
 // ✅ Schedule background jobs after Hangfire is fully initialized
 app.Lifetime.ApplicationStarted.Register(() =>
