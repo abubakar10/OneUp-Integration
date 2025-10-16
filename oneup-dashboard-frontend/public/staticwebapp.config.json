@@ -28,5 +28,11 @@
   },
   "platform": {
     "apiRuntime": "node:20"
+  },
+  "build": {
+    "appBuildCommand": "npm run build",
+    "apiBuildCommand": "",
+    "appLocation": ".",
+    "outputLocation": "dist"
   }
 }
