@@ -21,6 +21,7 @@ namespace OneUpDashboard.Api.Controllers
 
         // GET /api/invoices?page=1&pageSize=100&currency=USD&startDate=2024-01-01&endDate=2024-12-31&sortBy=invoiceDate
         [HttpGet]
+        [AllowAnonymous]
         public async Task<IActionResult> GetInvoices(
             [FromQuery] int page = 1,
             [FromQuery] int pageSize = 100,
@@ -85,6 +86,7 @@ namespace OneUpDashboard.Api.Controllers
 
         // GET /api/invoices/{id}
         [HttpGet("{id}")]
+        [AllowAnonymous]
         public async Task<IActionResult> GetInvoice(int id)
         {
             try
@@ -106,6 +108,7 @@ namespace OneUpDashboard.Api.Controllers
 
         // GET /api/invoices/stats
         [HttpGet("stats")]
+        [AllowAnonymous]
         public async Task<IActionResult> GetInvoiceStats()
         {
             try
@@ -134,6 +137,7 @@ namespace OneUpDashboard.Api.Controllers
 
         // GET /api/invoices/sales-summary
         [HttpGet("sales-summary")]
+        [AllowAnonymous]
         public async Task<IActionResult> GetSalesSummary()
         {
             try
@@ -172,6 +176,7 @@ namespace OneUpDashboard.Api.Controllers
 
         // GET /api/invoices/debug-data
         [HttpGet("debug-data")]
+        [AllowAnonymous]
         public async Task<IActionResult> GetDebugData()
         {
             try
@@ -214,6 +219,7 @@ namespace OneUpDashboard.Api.Controllers
 
         // GET /api/invoices/manual-currency-totals
         [HttpGet("manual-currency-totals")]
+        [AllowAnonymous]
         public async Task<IActionResult> GetManualCurrencyTotals()
         {
             try
@@ -308,6 +314,7 @@ namespace OneUpDashboard.Api.Controllers
 
         // GET /api/invoices/currency-sales?timePeriod=month&startDate=2024-01-01&endDate=2024-01-31
         [HttpGet("currency-sales")]
+        [AllowAnonymous]
         public async Task<IActionResult> GetCurrencySalesByTimePeriod(
             [FromQuery] string timePeriod = "all",
             [FromQuery] DateTime? startDate = null,

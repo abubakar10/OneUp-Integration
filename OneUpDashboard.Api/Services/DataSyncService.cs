@@ -328,15 +328,36 @@ namespace OneUpDashboard.Api.Services
         /// </summary>
         private async Task SaveInvoiceBatchAsync(List<InvoiceDocument> invoices)
         {
-            if (invoices.Count == 0) return;
+            if (invoices.Count == 0) 
+            {
+                _logger.LogWarning("⚠️ SaveInvoiceBatchAsync: No invoices to save");
+                return;
+            }
 
             try
             {
+                _logger.LogInformation("💾 SaveInvoiceBatchAsync: Saving batch of {Count} invoices...", invoices.Count);
+                
+                // Get count before save
+                var beforeCount = await _mongoDbService.GetInvoiceCountAsync();
+                
                 await _mongoDbService.UpsertInvoicesAsync(invoices);
+                
+                // Get count after save
+                var afterCount = await _mongoDbService.GetInvoiceCountAsync();
+                
+                _logger.LogInformation("✅ SaveInvoiceBatchAsync: Batch saved. Before: {Before}, After: {After}, Expected increase: {Expected}", 
+                    beforeCount, afterCount, invoices.Count);
+                
+                if (afterCount - beforeCount != invoices.Count)
+                {
+                    _logger.LogWarning("⚠️ SaveInvoiceBatchAsync: Count mismatch! Expected +{Expected}, got +{Actual}", 
+                        invoices.Count, afterCount - beforeCount);
+                }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "❌ Failed to save invoice batch of {Count} records", invoices.Count);
+                _logger.LogError(ex, "❌ Failed to save invoice batch of {Count} records: {Message}", invoices.Count, ex.Message);
                 throw;
             }
         }
