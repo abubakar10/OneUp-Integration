@@ -1,25 +1,32 @@
 # Azure DevOps Pipeline for OneUp Dashboard
-# This pipeline builds and deploys both frontend and backend to Azure
+# Builds and deploys both frontend (React + Vite) and backend (.NET) to Azure
 
 trigger:
-  - main
-  - master
+  branches:
+    include:
+      - main
+      - master
 
 variables:
   buildConfiguration: "Release"
-  azureSubscription: "YourAzureSubscriptionConnectionName" # Update this
+  azureSubscription: "YourAzureSubscriptionConnectionName" # <-- Update this to your actual Azure service connection name
   backendAppName: "oneup-dashboard-api"
   frontendAppName: "oneup-dashboard-frontend"
   resourceGroupName: "oneup-dashboard-rg"
 
 stages:
+  # ====================
+  # 1️⃣ BUILD STAGE
+  # ====================
   - stage: Build
     displayName: "Build Applications"
     jobs:
+      # ---- Build .NET Backend ----
       - job: BuildBackend
         displayName: "Build .NET API"
         pool:
           vmImage: "ubuntu-latest"
+
         steps:
           - task: UseDotNet@2
             displayName: "Use .NET 8 SDK"
@@ -54,10 +61,12 @@ stages:
               pathToPublish: "$(Build.ArtifactStagingDirectory)/api"
               artifactName: "api"
 
+      # ---- Build React Frontend ----
       - job: BuildFrontend
         displayName: "Build React Frontend"
         pool:
           vmImage: "ubuntu-latest"
+
         steps:
           - task: NodeTool@0
             displayName: "Use Node.js 18"
@@ -80,11 +89,15 @@ stages:
               pathToPublish: "oneup-dashboard-frontend/dist"
               artifactName: "frontend"
 
+  # ====================
+  # 2️⃣ DEPLOY STAGE
+  # ====================
   - stage: Deploy
     displayName: "Deploy to Azure"
     dependsOn: Build
     condition: succeeded()
     jobs:
+      # ---- Deploy API to Azure App Service ----
       - deployment: DeployBackend
         displayName: "Deploy API to Azure App Service"
         environment: "production"
@@ -94,6 +107,9 @@ stages:
           runOnce:
             deploy:
               steps:
+                - download: current
+                  artifact: api
+
                 - task: AzureWebApp@1
                   displayName: "Deploy API to Azure App Service"
                   inputs:
@@ -113,6 +129,7 @@ stages:
                       -Jwt__Issuer "$(JwtIssuer)"
                       -Jwt__Audience "$(JwtAudience)"
 
+      # ---- Deploy Frontend to Azure Static Web App ----
       - deployment: DeployFrontend
         displayName: "Deploy Frontend to Azure Static Web Apps"
         environment: "production"
@@ -122,10 +139,13 @@ stages:
           runOnce:
             deploy:
               steps:
+                - download: current
+                  artifact: frontend
+
                 - task: AzureStaticWebApp@0
-                  displayName: "Deploy to Azure Static Web Apps"
+                  displayName: "Deploy to Azure Static Web App"
                   inputs:
-                    azureSubscription: "$(azureSubscription)"
+                    azure_static_web_apps_api_token: $(AZURE_STATIC_WEB_APPS_API_TOKEN) # Add this secret in DevOps Library
                     app_location: "oneup-dashboard-frontend"
-                    output_location: "dist"
+                    output_location: "oneup-dashboard-frontend/dist"
                     skip_app_build: true
