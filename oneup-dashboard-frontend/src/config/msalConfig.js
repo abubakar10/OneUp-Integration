@@ -3,8 +3,8 @@ import { LogLevel } from '@azure/msal-browser';
 // Get environment-specific URLs
 const isProduction = import.meta.env.PROD;
 const redirectUri = isProduction 
-    ? 'https://oneup-dashboard-frontend.azurestaticapps.net/login'
-    : 'http://localhost:5173/login';
+    ? 'https://oneup-dashboard-frontend.azurestaticapps.net'
+    : 'http://localhost:5173';
 
 /**
  * Configuration object to be passed to MSAL instance on creation.
