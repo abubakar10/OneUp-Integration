@@ -11,6 +11,8 @@ const Analytics = lazy(() => import("./Pages/Analytics"));
 const Salespersons = lazy(() => import("./Pages/Salespersons"));
 const Customers = lazy(() => import("./Pages/Customers"));
 const Reports = lazy(() => import("./Pages/Reports"));
+const BillsReports = lazy(() => import("./Pages/BillsReports"));
+const InvoicesPaidReports = lazy(() => import("./Pages/InvoicesPaidReports"));
 const Settings = lazy(() => import("./Pages/Settings"));
 const SystemStatus = lazy(() => import("./Pages/SystemStatus"));
 const TestConnection = lazy(() => import("./Pages/TestConnection"));
@@ -53,6 +55,8 @@ function App() {
                     <Route path="/salespersons" element={<Salespersons />} />
                     <Route path="/customers" element={<Customers />} />
                     <Route path="/reports" element={<Reports />} />
+                    <Route path="/bills-reports" element={<BillsReports />} />
+                    <Route path="/invoices-paid-reports" element={<InvoicesPaidReports />} />
                     <Route path="/settings" element={<Settings />} />
                     <Route path="/system-status" element={<SystemStatus />} />
                   </Routes>

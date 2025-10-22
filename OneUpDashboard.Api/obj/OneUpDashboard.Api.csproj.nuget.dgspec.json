@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\PMLS\\Desktop\\OneUpDashboard\\OneUpDashboard.Api\\OneUpDashboard.Api.csproj": {}
+    "C:\\Users\\PMLS\\Desktop\\OneUpDashboard\\OneUpDashboard.api\\OneUpDashboard.Api.csproj": {}
   },
   "projects": {
-    "C:\\Users\\PMLS\\Desktop\\OneUpDashboard\\OneUpDashboard.Api\\OneUpDashboard.Api.csproj": {
+    "C:\\Users\\PMLS\\Desktop\\OneUpDashboard\\OneUpDashboard.api\\OneUpDashboard.Api.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\PMLS\\Desktop\\OneUpDashboard\\OneUpDashboard.Api\\OneUpDashboard.Api.csproj",
+        "projectUniqueName": "C:\\Users\\PMLS\\Desktop\\OneUpDashboard\\OneUpDashboard.api\\OneUpDashboard.Api.csproj",
         "projectName": "OneUpDashboard.Api",
-        "projectPath": "C:\\Users\\PMLS\\Desktop\\OneUpDashboard\\OneUpDashboard.Api\\OneUpDashboard.Api.csproj",
+        "projectPath": "C:\\Users\\PMLS\\Desktop\\OneUpDashboard\\OneUpDashboard.api\\OneUpDashboard.Api.csproj",
         "packagesPath": "C:\\Users\\PMLS\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\PMLS\\Desktop\\OneUpDashboard\\OneUpDashboard.Api\\obj\\",
+        "outputPath": "C:\\Users\\PMLS\\Desktop\\OneUpDashboard\\OneUpDashboard.api\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\PMLS\\AppData\\Roaming\\NuGet\\NuGet.Config"

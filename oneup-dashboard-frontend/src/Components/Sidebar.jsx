@@ -4,6 +4,7 @@ import { useAuth } from "../contexts/AuthContext";
 
 const Sidebar = () => {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [openDropdowns, setOpenDropdowns] = useState({});
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -12,12 +13,35 @@ const Sidebar = () => {
     navigate('/login');
   };
 
+  const toggleDropdown = (dropdownName) => {
+    setOpenDropdowns(prev => ({
+      ...prev,
+      [dropdownName]: !prev[dropdownName]
+    }));
+  };
+
   const links = [
     { name: "Dashboard", path: "/", icon: "📊" },
     { name: "Sync Monitor", path: "/sync-monitor", icon: "🔄" },
     { name: "Analytics", path: "/analytics", icon: "📈" },
-    { name: "Salespersons", path: "/salespersons", icon: "👥" },
-    { name: "Customers", path: "/customers", icon: "🏢" },
+    { 
+      name: "Finance Reports", 
+      icon: "💰", 
+      type: "dropdown",
+      children: [
+        { name: "Bills Reports", path: "/bills-reports", icon: "📋" },
+        { name: "Invoices Paid Reports", path: "/invoices-paid-reports", icon: "💳" }
+      ]
+    },
+    { 
+      name: "Sales Report", 
+      icon: "📊", 
+      type: "dropdown",
+      children: [
+        { name: "Salespersons", path: "/salespersons", icon: "👥" },
+        { name: "Customers", path: "/customers", icon: "🏢" }
+      ]
+    },
     { name: "Reports", path: "/reports", icon: "📋" },
     { name: "System Status", path: "/system-status", icon: "⚙️" },
     { name: "Settings", path: "/settings", icon: "🔧" },
@@ -48,27 +72,80 @@ const Sidebar = () => {
 
       {/* Navigation */}
       <nav className="flex flex-col gap-2 p-4 flex-1">
-        {links.map((link) => (
-          <NavLink
-            key={link.name}
-            to={link.path}
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
-                isActive 
-                  ? "bg-gradient-to-r from-blue-600 to-purple-600 shadow-lg text-white" 
-                  : "hover:bg-gray-800 hover:shadow-md hover:translate-x-1"
-              }`
-            }
-            title={isCollapsed ? link.name : ""}
-          >
-            <span className="text-xl flex-shrink-0">{link.icon}</span>
-            {!isCollapsed && (
-              <span className="font-medium group-hover:text-blue-300 transition-colors">
-                {link.name}
-              </span>
-            )}
-          </NavLink>
-        ))}
+        {links.map((link) => {
+          if (link.type === "dropdown") {
+            const isOpen = openDropdowns[link.name];
+            return (
+              <div key={link.name} className="relative">
+                <button
+                  onClick={() => toggleDropdown(link.name)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group hover:bg-gray-800 hover:shadow-md hover:translate-x-1 ${
+                    isOpen ? "bg-gray-800" : ""
+                  }`}
+                  title={isCollapsed ? link.name : ""}
+                >
+                  <span className="text-xl flex-shrink-0">{link.icon}</span>
+                  {!isCollapsed && (
+                    <>
+                      <span className="font-medium group-hover:text-blue-300 transition-colors flex-1 text-left">
+                        {link.name}
+                      </span>
+                      <span className={`text-sm transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}>
+                        ▼
+                      </span>
+                    </>
+                  )}
+                </button>
+                
+                {/* Dropdown Menu */}
+                {!isCollapsed && isOpen && (
+                  <div className="ml-4 mt-2 space-y-1">
+                    {link.children.map((child) => (
+                      <NavLink
+                        key={child.name}
+                        to={child.path}
+                        className={({ isActive }) =>
+                          `flex items-center gap-3 px-4 py-2 rounded-lg transition-all duration-200 group ${
+                            isActive 
+                              ? "bg-gradient-to-r from-blue-600 to-purple-600 shadow-lg text-white" 
+                              : "hover:bg-gray-700 hover:shadow-md hover:translate-x-1"
+                          }`
+                        }
+                      >
+                        <span className="text-lg flex-shrink-0">{child.icon}</span>
+                        <span className="font-medium group-hover:text-blue-300 transition-colors text-sm">
+                          {child.name}
+                        </span>
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          } else {
+            return (
+              <NavLink
+                key={link.name}
+                to={link.path}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
+                    isActive 
+                      ? "bg-gradient-to-r from-blue-600 to-purple-600 shadow-lg text-white" 
+                      : "hover:bg-gray-800 hover:shadow-md hover:translate-x-1"
+                  }`
+                }
+                title={isCollapsed ? link.name : ""}
+              >
+                <span className="text-xl flex-shrink-0">{link.icon}</span>
+                {!isCollapsed && (
+                  <span className="font-medium group-hover:text-blue-300 transition-colors">
+                    {link.name}
+                  </span>
+                )}
+              </NavLink>
+            );
+          }
+        })}
         
         {/* User Info & Logout - Moved up under navigation links */}
         {user && (
