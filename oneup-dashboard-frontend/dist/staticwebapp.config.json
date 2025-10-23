@@ -10,7 +10,7 @@
     },
     {
       "route": "/*",
-      "serve": "/index.html",
+      "rewrite": "/index.html",
       "statusCode": 200
     }
   ],
@@ -28,11 +28,5 @@
   },
   "platform": {
     "apiRuntime": "node:20"
-  },
-  "build": {
-    "appBuildCommand": "npm run build",
-    "apiBuildCommand": "",
-    "appLocation": ".",
-    "outputLocation": "dist"
   }
 }

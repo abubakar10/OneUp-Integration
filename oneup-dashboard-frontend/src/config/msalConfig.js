@@ -3,7 +3,7 @@ import { LogLevel } from '@azure/msal-browser';
 // Get environment-specific URLs
 const isProduction = import.meta.env.PROD;
 const redirectUri = isProduction 
-    ? 'https://oneup-dashboard-frontend.azurestaticapps.net'
+    ? 'https://yellow-bush-0459bbe00.3.azurestaticapps.net'
     : 'http://localhost:5173';
 
 /**
