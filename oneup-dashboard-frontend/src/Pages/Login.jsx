@@ -72,7 +72,7 @@ const Login = () => {
 
     try {
       const apiBaseUrl = import.meta.env.PROD 
-        ? 'https://itcs-sales-fkf6fza6czg0gdf6.canadacentral-01.azurewebsites.net/api'
+        ? 'https://testing-sales-cfhpasb2bfg0ayce.uaenorth-01.azurewebsites.net/api'
         : 'http://localhost:5216/api';
       
       const response = await fetch(`${apiBaseUrl}/auth/callback`, {
