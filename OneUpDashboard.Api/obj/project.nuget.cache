@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "2XMS6XlKtuc=",
+  "dgSpecHash": "+dq/TnDNbzI=",
   "success": true,
-  "projectFilePath": "C:\\Users\\PMLS\\Desktop\\Sales Dashboard\\OneUpDashboard.api\\OneUpDashboard.Api.csproj",
+  "projectFilePath": "C:\\Users\\PMLS\\Desktop\\Sales Dashboard\\OneUpDashboard.Api\\OneUpDashboard.Api.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\PMLS\\.nuget\\packages\\awssdk.core\\3.7.100.14\\awssdk.core.3.7.100.14.nupkg.sha512",
     "C:\\Users\\PMLS\\.nuget\\packages\\awssdk.securitytoken\\3.7.100.14\\awssdk.securitytoken.3.7.100.14.nupkg.sha512",
