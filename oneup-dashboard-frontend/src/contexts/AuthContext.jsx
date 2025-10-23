@@ -102,7 +102,11 @@ export const AuthProvider = ({ children }) => {
 
   const exchangeTokenForBackend = async (msalToken) => {
     try {
-      const response = await fetch('http://localhost:5216/api/auth/exchange-token', {
+      const apiBaseUrl = import.meta.env.PROD 
+        ? 'https://itcs-sales-fkf6fza6czg0gdf6.canadacentral-01.azurewebsites.net/api'
+        : 'http://localhost:5216/api';
+      
+      const response = await fetch(`${apiBaseUrl}/auth/exchange-token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

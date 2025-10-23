@@ -7,16 +7,11 @@
     {
       "route": "/hangfire/*",
       "allowedRoles": ["authenticated"]
-    },
-    {
-      "route": "/*",
-      "rewrite": "/index.html",
-      "statusCode": 200
     }
   ],
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/images/*.{png,jpg,jpeg,gif,svg}", "/css/*", "/js/*", "/api/*"]
+    "exclude": ["/images/*.{png,jpg,jpeg,gif,svg}", "/css/*", "/js/*", "/api/*", "/assets/*"]
   },
   "mimeTypes": {
     ".json": "application/json",

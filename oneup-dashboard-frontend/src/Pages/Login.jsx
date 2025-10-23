@@ -71,7 +71,11 @@ const Login = () => {
     setError('');
 
     try {
-      const response = await fetch('http://localhost:5216/api/auth/callback', {
+      const apiBaseUrl = import.meta.env.PROD 
+        ? 'https://itcs-sales-fkf6fza6czg0gdf6.canadacentral-01.azurewebsites.net/api'
+        : 'http://localhost:5216/api';
+      
+      const response = await fetch(`${apiBaseUrl}/auth/callback`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
