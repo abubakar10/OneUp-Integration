@@ -1,10 +1,7 @@
 import { LogLevel } from '@azure/msal-browser';
 
 // Get environment-specific URLs
-const isProduction = import.meta.env.PROD;
-const redirectUri = isProduction 
-    ? 'https://yellow-bush-0459bbe00.3.azurestaticapps.net'
-    : 'http://localhost:5173';
+const redirectUri = 'https://black-sky-06e804f00.3.azurestaticapps.net';
 
 /**
  * Configuration object to be passed to MSAL instance on creation.
