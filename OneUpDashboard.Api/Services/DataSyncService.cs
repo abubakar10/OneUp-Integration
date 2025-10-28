@@ -67,6 +67,7 @@ namespace OneUpDashboard.Api.Services
                 syncLog.Status = "failed";
                 syncLog.ErrorMessage = ex.Message;
                 syncLog.DurationSeconds = (int)(syncLog.EndTime.Value - syncLog.StartTime).TotalSeconds;
+                syncLog.Notes = "Sync failed - only partial invoice updates may have occurred";
 
                 await _mongoDbService.UpdateSyncLogAsync(syncLog);
 
@@ -76,7 +77,7 @@ namespace OneUpDashboard.Api.Services
 
         /// <summary>
         /// Smart pagination loop - fetches ALL invoices respecting OneUp API's 100-record limit
-        /// Also deletes invoices that no longer exist in ERP
+        /// Updates existing invoices and inserts new ones. Never deletes any invoices from database.
         /// </summary>
         private async Task<SyncResult> SyncInvoicesWithPaginationAsync(SyncLogDocument syncLog)
         {
@@ -89,14 +90,9 @@ namespace OneUpDashboard.Api.Services
 
             // Get existing invoices for comparison and updates
             var existingInvoices = await _mongoDbService.GetInvoicesAsync(0, int.MaxValue);
-            var existingInvoiceIds = new HashSet<int>();
-            foreach (var invoice in existingInvoices)
-            {
-                existingInvoiceIds.Add(invoice.Id);
-            }
-
-            // Track which invoices are found in ERP during this sync
-            var foundInvoiceIds = new HashSet<int>();
+            
+            // Track processed invoices for logging
+            var processedInvoiceIds = new HashSet<int>();
 
             while (hasMoreData)
             {
@@ -140,8 +136,8 @@ namespace OneUpDashboard.Api.Services
                             batchInvoices.Add(invoice);
                             result.ProcessedInvoices++;
                             
-                            // Track this invoice as found in ERP
-                            foundInvoiceIds.Add(invoice.Id);
+                            // Track this invoice as processed
+                            processedInvoiceIds.Add(invoice.Id);
                         }
                     }
 
@@ -187,8 +183,10 @@ namespace OneUpDashboard.Api.Services
                 _logger.LogInformation("💾 Saved final batch of {Count} invoices", batchInvoices.Count);
             }
 
-            // Delete invoices that no longer exist in ERP
-            await DeleteMissingInvoicesAsync(existingInvoiceIds, foundInvoiceIds, syncLog);
+            // Log sync completion - no deletion logic, only updates and inserts
+            _logger.LogInformation("✅ Sync completed. Updated/inserted {Count} invoices from ERP. No invoices were deleted.", processedInvoiceIds.Count);
+            syncLog.Notes = $"Successfully synced {processedInvoiceIds.Count} invoices. No deletions performed - database preserves all historical data.";
+            await _mongoDbService.UpdateSyncLogAsync(syncLog);
 
             return result;
         }
@@ -362,50 +360,6 @@ namespace OneUpDashboard.Api.Services
             }
         }
 
-        /// <summary>
-        /// Delete invoices that exist in database but were not found in ERP (deleted from ERP)
-        /// </summary>
-        private async Task DeleteMissingInvoicesAsync(HashSet<int> existingInvoiceIds, HashSet<int> foundInvoiceIds, SyncLogDocument syncLog)
-        {
-            try
-            {
-                // Find invoices that exist in DB but were not found in ERP
-                var invoicesToDelete = existingInvoiceIds.Except(foundInvoiceIds).ToList();
-                
-                if (invoicesToDelete.Count > 0)
-                {
-                    _logger.LogInformation("🗑️ Found {Count} invoices to delete (not found in ERP)", invoicesToDelete.Count);
-                    
-                    // Delete invoices in batches to avoid overwhelming the database
-                    const int deleteBatchSize = 100;
-                    var deletedCount = 0;
-                    
-                    for (int i = 0; i < invoicesToDelete.Count; i += deleteBatchSize)
-                    {
-                        var batch = invoicesToDelete.Skip(i).Take(deleteBatchSize).ToList();
-                        await _mongoDbService.DeleteInvoicesByIdsAsync(batch);
-                        deletedCount += batch.Count;
-                        
-                        _logger.LogInformation("🗑️ Deleted batch of {Count} invoices. Total deleted: {Total}", batch.Count, deletedCount);
-                        
-                        // Update sync log with deletion progress
-                        syncLog.Notes = $"Synced {foundInvoiceIds.Count} invoices, deleted {deletedCount} missing invoices";
-                        await _mongoDbService.UpdateSyncLogAsync(syncLog);
-                    }
-                    
-                    _logger.LogInformation("✅ Successfully deleted {Count} invoices that no longer exist in ERP", deletedCount);
-                }
-                else
-                {
-                    _logger.LogInformation("✅ No invoices to delete - all existing invoices found in ERP");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "❌ Failed to delete missing invoices: {Message}", ex.Message);
-                // Don't throw - we don't want deletion failures to break the entire sync
-            }
-        }
 
         /// <summary>
         /// Sync employees from OneUp API

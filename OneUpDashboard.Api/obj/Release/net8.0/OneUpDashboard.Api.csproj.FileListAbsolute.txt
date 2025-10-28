@@ -200,3 +200,15 @@ C:\Users\PMLS\Desktop\Sales Dashboard\OneUpDashboard.Api\obj\Release\net8.0\refi
 C:\Users\PMLS\Desktop\Sales Dashboard\OneUpDashboard.Api\obj\Release\net8.0\OneUpDashboard.Api.pdb
 C:\Users\PMLS\Desktop\Sales Dashboard\OneUpDashboard.Api\obj\Release\net8.0\OneUpDashboard.Api.genruntimeconfig.cache
 C:\Users\PMLS\Desktop\Sales Dashboard\OneUpDashboard.Api\obj\Release\net8.0\ref\OneUpDashboard.Api.dll
+C:\Users\PMLS\Desktop\Sales Dashboard\OneUpDashboard.Api\bin\Release\net8.0\publish\publish\appsettings.Development.json
+C:\Users\PMLS\Desktop\Sales Dashboard\OneUpDashboard.Api\bin\Release\net8.0\publish\publish\appsettings.json
+C:\Users\PMLS\Desktop\Sales Dashboard\OneUpDashboard.Api\bin\Release\net8.0\publish\publish\appsettings.Production.json
+C:\Users\PMLS\Desktop\Sales Dashboard\OneUpDashboard.Api\bin\Release\net8.0\publish\publish\OneUpDashboard.Api.deps.json
+C:\Users\PMLS\Desktop\Sales Dashboard\OneUpDashboard.Api\bin\Release\net8.0\publish\publish\OneUpDashboard.Api.runtimeconfig.json
+C:\Users\PMLS\Desktop\Sales Dashboard\OneUpDashboard.Api\bin\Release\net8.0\publish\publish\web.config
+C:\Users\PMLS\Desktop\Sales Dashboard\OneUpDashboard.Api\bin\Release\net8.0\publish\publish\publish\appsettings.Development.json
+C:\Users\PMLS\Desktop\Sales Dashboard\OneUpDashboard.Api\bin\Release\net8.0\publish\publish\publish\appsettings.json
+C:\Users\PMLS\Desktop\Sales Dashboard\OneUpDashboard.Api\bin\Release\net8.0\publish\publish\publish\appsettings.Production.json
+C:\Users\PMLS\Desktop\Sales Dashboard\OneUpDashboard.Api\bin\Release\net8.0\publish\publish\publish\OneUpDashboard.Api.deps.json
+C:\Users\PMLS\Desktop\Sales Dashboard\OneUpDashboard.Api\bin\Release\net8.0\publish\publish\publish\OneUpDashboard.Api.runtimeconfig.json
+C:\Users\PMLS\Desktop\Sales Dashboard\OneUpDashboard.Api\bin\Release\net8.0\publish\publish\publish\web.config
