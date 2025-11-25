@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import apiClient from "../api/apiClient";
+import cachedApiClient from "../api/cachedApiClient";
 
 function SyncMonitor() {
   const [syncStatus, setSyncStatus] = useState(null);
@@ -9,6 +10,7 @@ function SyncMonitor() {
   const [error, setError] = useState(null);
   const [logs, setLogs] = useState([]);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const lastProcessedCount = useRef(0);
 
   // Real-time refresh every 2 seconds when sync is running
   useEffect(() => {
@@ -19,18 +21,59 @@ function SyncMonitor() {
           apiClient.get("/sync/stats")
         ]);
 
-        setSyncStatus(statusResponse.data);
-        setDbStats(statsResponse.data);
-        
-        // Add log entry for status updates
-        if (statusResponse.data.processedRecords > 0) {
-          const newLog = {
+        // ✅ Smart cache invalidation when sync completes
+        const newStatus = statusResponse.data;
+        if (syncStatus?.isRunning && !newStatus.isRunning) {
+          // Add completion log
+          const completionLog = {
             id: Date.now(),
             timestamp: new Date().toLocaleTimeString(),
-            message: `📊 Processed: ${statusResponse.data.processedRecords} invoices | Total in DB: ${statsResponse.data.totalInvoices}`,
-            type: 'info'
+            message: newStatus.lastSyncStatus === 'completed' 
+              ? `✅ Sync completed successfully! Final count: ${newStatus.processedRecords || 0} invoices`
+              : `❌ Sync ${newStatus.lastSyncStatus || 'stopped'}`,
+            type: newStatus.lastSyncStatus === 'completed' ? 'success' : 'error'
           };
-          setLogs(prev => [newLog, ...prev.slice(0, 19)]); // Keep last 20 logs
+          setLogs(prev => [completionLog, ...prev.slice(0, 19)]);
+          
+          // Cache invalidation for successful completion
+          if (newStatus.lastSyncStatus === 'completed') {
+            console.log('🔄 Sync completed, invalidating invoice cache...');
+            const invalidatedCount = cachedApiClient.invalidateInvoiceCache();
+            console.log(`✅ Invalidated ${invalidatedCount} cache entries after sync completion`);
+            
+            const cacheLog = {
+              id: Date.now() + 1,
+              timestamp: new Date().toLocaleTimeString(),
+              message: `🗑️ Cache invalidated: ${invalidatedCount} entries cleared for fresh data`,
+              type: 'success'
+            };
+            setLogs(prev => [cacheLog, ...prev.slice(0, 19)]);
+          }
+        }
+
+        setSyncStatus(newStatus);
+        setDbStats(statsResponse.data);
+        
+        // ✅ Only add log entries when sync is actually running and processing records
+        if (newStatus.isRunning && statusResponse.data.processedRecords > 0) {
+          // Only add a new log if the processed count has changed since last update
+          const currentProcessedCount = statusResponse.data.processedRecords;
+          
+          if (currentProcessedCount !== lastProcessedCount.current) {
+            const newLog = {
+              id: Date.now(),
+              timestamp: new Date().toLocaleTimeString(),
+              message: `📊 Processed: ${currentProcessedCount} invoices | Total in DB: ${statsResponse.data.totalInvoices}`,
+              type: 'info'
+            };
+            setLogs(prev => [newLog, ...prev.slice(0, 19)]); // Keep last 20 logs
+            lastProcessedCount.current = currentProcessedCount;
+          }
+        }
+        
+        // ✅ Reset processed count when sync stops
+        if (!newStatus.isRunning && syncStatus?.isRunning) {
+          lastProcessedCount.current = 0;
         }
         
         setError(null);
@@ -51,7 +94,7 @@ function SyncMonitor() {
     }, 2000); // Refresh every 2 seconds
 
     return () => clearInterval(interval);
-  }, [autoRefresh]);
+  }, [autoRefresh, syncStatus?.isRunning]);
 
   const startFullSync = async () => {
     try {
@@ -128,7 +171,11 @@ function SyncMonitor() {
 
   const clearLogs = () => {
     setLogs([]);
+    lastProcessedCount.current = 0;
   };
+
+  // ✅ Auto-clear logs when sync is not running (optional)
+  const shouldShowLogs = syncStatus?.isRunning || logs.length > 0;
 
   if (loading && !syncStatus) {
     return (
@@ -278,7 +325,11 @@ function SyncMonitor() {
             {logs.length === 0 ? (
               <div className="text-center text-gray-500 py-8">
                 <div className="text-4xl mb-4">📝</div>
-                <p>No logs yet. Start a sync to see real-time updates!</p>
+                {syncStatus?.isRunning ? (
+                  <p>Sync is running... Waiting for updates...</p>
+                ) : (
+                  <p>No active sync session. Start a sync to see real-time updates!</p>
+                )}
               </div>
             ) : (
               <div className="space-y-2">

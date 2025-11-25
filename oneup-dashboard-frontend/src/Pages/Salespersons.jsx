@@ -265,7 +265,10 @@ function Salespersons() {
         const cacheKey = `salespersons-${period}-${year}-${month}-${quarter}-${sortBy}`;
         const cachedData = sessionStorage.getItem(cacheKey);
         
-        if (cachedData) {
+        // ✅ Smart cache validation - check if cache should be refreshed
+        const shouldRefresh = cachedApiClient.shouldRefreshInvoiceCache(5); // 5 minutes max age
+        
+        if (cachedData && !shouldRefresh) {
           try {
             const parsedData = JSON.parse(cachedData);
             console.log(`📦 Loading cached salesperson data: ${parsedData.length} salespersons`);
@@ -275,6 +278,9 @@ function Salespersons() {
           } catch (error) {
             console.warn("Failed to parse cached salesperson data:", error);
           }
+        } else if (shouldRefresh) {
+          console.log('🔄 Cache is stale, invalidating invoice cache...');
+          cachedApiClient.invalidateInvoiceCache();
         }
 
         // Fetch ALL invoices for complete salesperson analytics
@@ -414,6 +420,18 @@ function Salespersons() {
               <p className="text-gray-600 mt-1">Track and analyze sales team performance</p>
             </div>
             <div className="mt-4 md:mt-0 flex gap-2">
+              <button
+                onClick={() => {
+                  console.log('🔄 Smart refresh: Invalidating invoice cache...');
+                  const invalidatedCount = cachedApiClient.invalidateInvoiceCache();
+                  console.log(`✅ Invalidated ${invalidatedCount} cache entries, reloading...`);
+                  window.location.reload();
+                }}
+                className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center gap-2"
+                title="Smart refresh - clears stale invoice cache and reloads fresh data"
+              >
+                🔄 Refresh
+              </button>
               <button
                 onClick={() => setViewMode(viewMode === "cards" ? "table" : "cards")}
                 className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors flex items-center gap-2"

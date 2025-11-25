@@ -30,7 +30,15 @@ const SystemStatus = () => {
         cachedApiClient.get('/sync/stats', { useCache: false })
       ]);
 
-      setSyncStatus(statusResponse.data);
+      // ✅ Smart cache invalidation when sync completes
+      const newStatus = statusResponse.data;
+      if (syncStatus?.isRunning && !newStatus.isRunning && newStatus.lastSyncStatus === 'completed') {
+        console.log('🔄 Sync completed, invalidating invoice cache...');
+        const invalidatedCount = cachedApiClient.invalidateInvoiceCache();
+        console.log(`✅ Invalidated ${invalidatedCount} cache entries after sync completion`);
+      }
+
+      setSyncStatus(newStatus);
       setDbStats(statsResponse.data);
       setError(null);
     } catch (err) {

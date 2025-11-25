@@ -72,6 +72,16 @@ class CachedApiClient {
   clearCache() {
     globalCache.clear();
   }
+
+  // ✅ Smart cache invalidation for invoices
+  invalidateInvoiceCache() {
+    return globalCache.invalidateInvoiceCache();
+  }
+
+  // ✅ Check if invoice cache should be refreshed
+  shouldRefreshInvoiceCache(maxAgeMinutes = 5) {
+    return globalCache.shouldRefreshInvoiceCache(maxAgeMinutes);
+  }
 }
 
 export default new CachedApiClient();

@@ -8,6 +8,8 @@ class CacheManager {
     this.sessionTtl = 60 * 60 * 1000; // 60 minutes for session cache
     this.compressionEnabled = true; // Enable data compression for large datasets
     this.preloadEnabled = true; // Enable preloading for better UX
+    this.lastInvoiceSync = null; // Track last invoice sync time
+    this.invoiceCacheKeys = new Set(); // Track invoice-related cache keys
   }
 
   // Generate a cache key
@@ -42,10 +44,16 @@ class CacheManager {
     const cache = useSessionCache ? this.sessionCache : this.cache;
     const maxSize = useSessionCache ? 50 : this.maxSize;
     
+    // Track invoice-related cache keys for smart invalidation
+    if (key.includes('/invoices') || key.includes('dashboard-invoices') || key.includes('salespersons')) {
+      this.invoiceCacheKeys.add(key);
+    }
+    
     // Remove oldest entries if cache is full
     if (cache.size >= maxSize) {
       const firstKey = cache.keys().next().value;
       cache.delete(firstKey);
+      this.invoiceCacheKeys.delete(firstKey);
     }
 
     // Compress large datasets to save memory
@@ -87,7 +95,53 @@ class CacheManager {
   clear() {
     this.cache.clear();
     this.sessionCache.clear();
+    this.invoiceCacheKeys.clear();
     console.log('🗑️ All cache cleared');
+  }
+
+  // ✅ Smart cache invalidation for invoice-related data
+  invalidateInvoiceCache() {
+    let invalidatedCount = 0;
+    
+    // Clear invoice-related cache keys from memory cache
+    for (const key of this.invoiceCacheKeys) {
+      if (this.cache.has(key)) {
+        this.cache.delete(key);
+        invalidatedCount++;
+      }
+      if (this.sessionCache.has(key)) {
+        this.sessionCache.delete(key);
+        invalidatedCount++;
+      }
+    }
+    
+    // Clear invoice-related session storage
+    const keysToRemove = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i);
+      if (key && (key.includes('dashboard-invoices') || key.includes('salespersons') || key.includes('invoice'))) {
+        keysToRemove.push(key);
+      }
+    }
+    
+    keysToRemove.forEach(key => {
+      sessionStorage.removeItem(key);
+      invalidatedCount++;
+    });
+    
+    this.invoiceCacheKeys.clear();
+    this.lastInvoiceSync = Date.now();
+    
+    console.log(`🗑️ Invalidated ${invalidatedCount} invoice-related cache entries`);
+    return invalidatedCount;
+  }
+
+  // ✅ Check if invoice cache needs refresh based on sync time
+  shouldRefreshInvoiceCache(maxAgeMinutes = 5) {
+    if (!this.lastInvoiceSync) return true;
+    
+    const ageMinutes = (Date.now() - this.lastInvoiceSync) / (60 * 1000);
+    return ageMinutes > maxAgeMinutes;
   }
 
   // Clear expired entries

@@ -659,7 +659,10 @@ function Dashboard() {
       const cacheKey = `dashboard-invoices-${sortBy}-${period}-${year}-${month}-${quarter}`;
       const cachedData = sessionStorage.getItem(cacheKey);
       
-      if (cachedData) {
+      // ✅ Smart cache validation - check if cache should be refreshed
+      const shouldRefresh = cachedApiClient.shouldRefreshInvoiceCache(5); // 5 minutes max age
+      
+      if (cachedData && !shouldRefresh) {
         try {
           const parsedData = JSON.parse(cachedData);
           console.log(`📦 Loading cached invoices: ${parsedData.length} invoices`);
@@ -670,6 +673,9 @@ function Dashboard() {
         } catch (error) {
           console.warn("Failed to parse cached data:", error);
         }
+      } else if (shouldRefresh) {
+        console.log('🔄 Cache is stale, invalidating invoice cache...');
+        cachedApiClient.invalidateInvoiceCache();
       }
 
       setLoading(true);
@@ -831,11 +837,14 @@ function Dashboard() {
             <div className="flex gap-2 flex-shrink-0">
               <button
                 onClick={() => {
+                  console.log('🔄 Smart refresh: Invalidating invoice cache...');
+                  const invalidatedCount = cachedApiClient.invalidateInvoiceCache();
                   clearDashboardCache();
-                  cachedApiClient.clearCache();
+                  console.log(`✅ Invalidated ${invalidatedCount} cache entries, reloading...`);
                   window.location.reload();
                 }}
                 className="px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center gap-2 text-sm"
+                title="Smart refresh - clears stale invoice cache and reloads fresh data"
               >
                 🔄 <span className="hidden sm:inline">Refresh</span>
               </button>
@@ -950,85 +959,7 @@ function Dashboard() {
               </div>
             </div>
           </div>
-
-          {/* Currency Breakdown */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-3 rounded-lg bg-green-100 text-green-600">
-                    <div className="text-2xl">🇺🇸</div>
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900">USD Converted</h3>
-                    <p className="text-sm text-gray-500">US Dollar to PKR</p>
-                  </div>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Invoices:</span>
-                  <span className="font-medium text-gray-900">{pkrRevenueData.breakdown.usdInvoices}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Rate:</span>
-                  <span className="font-medium text-gray-900">{pkrRevenueData.usdToPkrRate} PKR/USD</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-3 rounded-lg bg-blue-100 text-blue-600">
-                    <div className="text-2xl">🇵🇰</div>
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900">PKR Direct</h3>
-                    <p className="text-sm text-gray-500">Pakistani Rupee</p>
-                  </div>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Invoices:</span>
-                  <span className="font-medium text-gray-900">{pkrRevenueData.breakdown.pkrInvoices}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">No Conversion:</span>
-                  <span className="font-medium text-gray-900">Direct PKR</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-3 rounded-lg bg-purple-100 text-purple-600">
-                    <div className="text-2xl">🇦🇪</div>
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900">AED Converted</h3>
-                    <p className="text-sm text-gray-500">UAE Dirham to PKR</p>
-                  </div>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Invoices:</span>
-                  <span className="font-medium text-gray-900">{pkrRevenueData.breakdown.aedInvoices}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Rate:</span>
-                  <span className="font-medium text-gray-900">AED→USD→PKR</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Time-Based Currency Sales Section */}
-        <div className="mb-8">
+          <div className="mb-8">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
               💱 Currency Sales Analysis
@@ -1194,6 +1125,84 @@ function Dashboard() {
             </div>
           </div> */}
         </div>
+          {/* Currency Breakdown */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-lg bg-green-100 text-green-600">
+                    <div className="text-2xl">🇺🇸</div>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">USD Converted</h3>
+                    <p className="text-sm text-gray-500">US Dollar to PKR</p>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Invoices:</span>
+                  <span className="font-medium text-gray-900">{pkrRevenueData.breakdown.usdInvoices}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Rate:</span>
+                  <span className="font-medium text-gray-900">{pkrRevenueData.usdToPkrRate} PKR/USD</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-lg bg-blue-100 text-blue-600">
+                    <div className="text-2xl">🇵🇰</div>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">PKR Direct</h3>
+                    <p className="text-sm text-gray-500">Pakistani Rupee</p>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Invoices:</span>
+                  <span className="font-medium text-gray-900">{pkrRevenueData.breakdown.pkrInvoices}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">No Conversion:</span>
+                  <span className="font-medium text-gray-900">Direct PKR</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-lg bg-purple-100 text-purple-600">
+                    <div className="text-2xl">🇦🇪</div>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">AED Converted</h3>
+                    <p className="text-sm text-gray-500">UAE Dirham to PKR</p>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Invoices:</span>
+                  <span className="font-medium text-gray-900">{pkrRevenueData.breakdown.aedInvoices}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Rate:</span>
+                  <span className="font-medium text-gray-900">AED→USD→PKR</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Time-Based Currency Sales Section */}
+        
 
         {/* Legacy Currency Breakdown Cards */}
         {/* {Object.keys(salesSummary.salesByCurrency).length > 0 && (
@@ -1658,11 +1667,14 @@ function Dashboard() {
             </div>
             <button
               onClick={() => {
+                console.log('🔄 Smart refresh: Invalidating invoice cache...');
+                const invalidatedCount = cachedApiClient.invalidateInvoiceCache();
                 clearDashboardCache();
-                cachedApiClient.clearCache();
+                console.log(`✅ Invalidated ${invalidatedCount} cache entries, reloading...`);
                 window.location.reload();
               }}
-              className="text-xs px-3 py-1 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+              className="text-xs px-3 py-1 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
+              title="Smart refresh - clears stale invoice cache and reloads fresh data"
             >
               🔄 Refresh Data
             </button>
