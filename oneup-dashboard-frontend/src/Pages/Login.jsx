@@ -14,7 +14,7 @@ const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
   
-  // Get the intended destination or default to dashboard
+  // Get the inteestination or default to dashboard
   const from = location.state?.from?.pathname || '/dashboard';
 
   // Wait for MSAL to initialize and check authentication status
