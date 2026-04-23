@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("OneUpDashboard.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+7ce7143ba54ff1f9ace5f6097dc2461945280d45")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+6b1c9b4071b55983359bfbf7f2e61de14983e655")]
 [assembly: System.Reflection.AssemblyProductAttribute("OneUpDashboard.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("OneUpDashboard.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

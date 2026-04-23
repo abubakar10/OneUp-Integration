@@ -12,6 +12,13 @@ function SyncMonitor() {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const lastProcessedCount = useRef(0);
 
+  const formatLastSync = (value) => {
+    if (!value) return "Never";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "Unavailable";
+    return parsed.toLocaleString();
+  };
+
   // Real-time refresh every 2 seconds when sync is running
   useEffect(() => {
     const fetchStatus = async () => {
@@ -207,7 +214,7 @@ function SyncMonitor() {
         )}
 
         {/* Stats Overview */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
           <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
             <div className="flex items-center justify-between">
               <div>
@@ -257,6 +264,16 @@ function SyncMonitor() {
                   <div className="animate-spin">🔄</div>
                 ) : '📋'}
               </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 uppercase">Last Sync</p>
+                <p className="text-sm font-bold text-indigo-600">{formatLastSync(syncStatus?.lastSync)}</p>
+              </div>
+              <div className="text-3xl">🕒</div>
             </div>
           </div>
         </div>
