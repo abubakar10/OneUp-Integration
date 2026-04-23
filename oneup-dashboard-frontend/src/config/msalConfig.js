@@ -1,7 +1,18 @@
 import { LogLevel } from '@azure/msal-browser';
 
-// Get environment-specific URLs
-const redirectUri = 'https://black-sky-06e804f00.3.azurestaticapps.net';
+const getRedirectUri = () => {
+    if (import.meta.env.VITE_MSAL_REDIRECT_URI) {
+        return import.meta.env.VITE_MSAL_REDIRECT_URI;
+    }
+
+    if (typeof window !== 'undefined' && window.location?.origin) {
+        return window.location.origin;
+    }
+
+    return 'http://localhost:5173';
+};
+
+const redirectUri = getRedirectUri();
 
 /**
  * Configuration object to be passed to MSAL instance on creation.

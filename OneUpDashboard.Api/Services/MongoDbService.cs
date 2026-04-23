@@ -13,7 +13,10 @@ namespace OneUpDashboard.Api.Services
 
         public MongoDbService(IConfiguration configuration)
         {
-            var connectionString = configuration.GetConnectionString("MongoDB") ?? "mongodb://localhost:27017";
+            var connectionString = configuration.GetConnectionString("MongoDB")
+                ?? configuration["ConnectionStrings:MongoDB"]
+                ?? configuration["MongoDB"]
+                ?? "mongodb://localhost:27017";
             var databaseName = configuration["MongoDB:DatabaseName"] ?? "OneUpDashboard";
             
             try
