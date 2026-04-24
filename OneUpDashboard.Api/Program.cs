@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using System.Collections.Generic;
+using System.Linq;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -28,10 +29,20 @@ builder.Services.AddCors(options =>
         {
             var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() 
                 ?? new[] { "http://localhost:5173" };
-            
-            policy.WithOrigins(allowedOrigins)
-                  .AllowAnyHeader()
-                  .AllowAnyMethod();
+
+            var normalizedAllowedOrigins = new HashSet<string>(
+                allowedOrigins
+                    .Where(origin => !string.IsNullOrWhiteSpace(origin))
+                    .Select(origin => origin.Trim().TrimEnd('/')),
+                StringComparer.OrdinalIgnoreCase);
+
+            // Accept configured origins and Azure Static Web Apps domains to avoid frequent hostname churn.
+            policy.SetIsOriginAllowed(origin =>
+                !string.IsNullOrWhiteSpace(origin) &&
+                (normalizedAllowedOrigins.Contains(origin.TrimEnd('/')) ||
+                 IsAzureStaticWebAppsOrigin(origin)))
+                .AllowAnyHeader()
+                .AllowAnyMethod();
         });
 });
 
@@ -238,6 +249,17 @@ static TimeZoneInfo ResolveTimeZone(string configuredTimeZoneId)
             return TimeZoneInfo.Local;
         }
     }
+}
+
+static bool IsAzureStaticWebAppsOrigin(string origin)
+{
+    if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri))
+    {
+        return false;
+    }
+
+    return uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) &&
+           uri.Host.EndsWith(".azurestaticapps.net", StringComparison.OrdinalIgnoreCase);
 }
 
 // Simple authorization filter for Hangfire Dashboard (development only)
