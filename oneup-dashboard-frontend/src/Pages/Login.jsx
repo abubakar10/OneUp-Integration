@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useMsal, useIsAuthenticated } from '@azure/msal-react';
+import { getApiBaseUrl } from '../config/apiConfig.js';
 
 const Login = () => {
   const [error, setError] = useState('');
@@ -71,9 +72,7 @@ const Login = () => {
     setError('');
 
     try {
-      const apiBaseUrl = import.meta.env.PROD 
-        ? 'oneupbackend-adayd2a6bghba2ds.eastasia-01.azurewebsites.net/api'
-        : 'http://localhost:5216/api';
+      const apiBaseUrl = getApiBaseUrl();
       
       const response = await fetch(`${apiBaseUrl}/auth/callback`, {
         method: 'POST',

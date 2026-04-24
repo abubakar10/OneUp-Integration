@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useMsal } from '@azure/msal-react';
 import { useNavigate } from 'react-router-dom';
+import { getApiBaseUrl } from '../config/apiConfig.js';
 
 const AuthContext = createContext();
 
@@ -102,9 +103,7 @@ export const AuthProvider = ({ children }) => {
 
   const exchangeTokenForBackend = async (msalToken) => {
     try {
-      const apiBaseUrl = import.meta.env.PROD 
-        ? 'https://testing-sales-cfhpasb2bfg0ayce.uaenorth-01.azurewebsites.net/api'
-        : 'http://localhost:5216/api';
+      const apiBaseUrl = getApiBaseUrl();
       
       const response = await fetch(`${apiBaseUrl}/auth/exchange-token`, {
         method: 'POST',

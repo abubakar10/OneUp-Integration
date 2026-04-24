@@ -103,6 +103,12 @@ app.MapControllers();
 // ✅ Add a simple health check endpoint
 app.MapGet("/", () => "OneUp Dashboard API is running!");
 app.MapGet("/health", () => new { Status = "Healthy", Timestamp = DateTime.UtcNow });
+// Browsing /api alone has no controller; explain so it is not mistaken for a broken deploy
+app.MapGet("/api", () => Results.Json(new
+{
+    status = "ok",
+    message = "API is running. There is no page at /api — use /api/<controller> (e.g. /api/invoices) or GET /health.",
+}));
 app.MapGet("/api/test", () => new { Message = "API Test endpoint working!", Timestamp = DateTime.UtcNow });
 
 // ✅ Schedule background jobs after Hangfire is fully initialized

@@ -1,11 +1,1 @@
-{
-  "Version": 1,
-  "Hash": "EfKOY6puaUA7/coi0N8nGHFxnXFsBfPkCVejcWml90o=",
-  "Source": "OneUpDashboard.Api",
-  "BasePath": "_content/OneUpDashboard.Api",
-  "Mode": "Default",
-  "ManifestType": "Build",
-  "ReferencedProjectsConfiguration": [],
-  "DiscoveryPatterns": [],
-  "Assets": []
-}
+{"Version":1,"Hash":"Htt5vMLyJTgynWATIXoR54R8HhnEF58uwj94snsJE88=","Source":"OneUpDashboard.Api","BasePath":"/","Mode":"Root","ManifestType":"Build","ReferencedProjectsConfiguration":[],"DiscoveryPatterns":[],"Assets":[],"Endpoints":[]}
