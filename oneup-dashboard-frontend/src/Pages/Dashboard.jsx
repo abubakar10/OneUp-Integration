@@ -291,7 +291,7 @@ const StatsCard = ({ icon, title, value, subtitle, color = "blue" }) => {
     purple: "from-purple-500 to-purple-600 text-purple-600 bg-purple-50",
     orange: "from-orange-500 to-orange-600 text-orange-600 bg-orange-50"
   };
-
+   ////aa
   return (
     <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
       <div className="flex items-center justify-between">
