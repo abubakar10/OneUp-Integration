@@ -23,11 +23,14 @@ jobs:
         with:
           dotnet-version: '8.x'
 
+      - name: Restore
+        run: dotnet restore "OneUpDashboard.Api/OneUpDashboard.Api.csproj"
+
       - name: Build with dotnet
-        run: dotnet build --configuration Release
+        run: dotnet build "OneUpDashboard.Api/OneUpDashboard.Api.csproj" --configuration Release --no-restore
 
       - name: dotnet publish
-        run: dotnet publish -c Release -o "${{env.DOTNET_ROOT}}/myapp"
+        run: dotnet publish "OneUpDashboard.Api/OneUpDashboard.Api.csproj" -c Release -o "${{env.DOTNET_ROOT}}/myapp" --no-build
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
@@ -38,13 +41,13 @@ jobs:
   deploy:
     runs-on: windows-latest
     needs: build
-    
+
     steps:
       - name: Download artifact from build job
         uses: actions/download-artifact@v4
         with:
           name: .net-app
-      
+
       - name: Deploy to Azure Web App
         id: deploy-to-webapp
         uses: azure/webapps-deploy@v3
